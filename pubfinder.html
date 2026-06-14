@@ -701,7 +701,7 @@
         if (!key) return [];
         try {
           const res = await fetch(
-            `https://api.foursquare.com/v3/places/search?ll=${lat},${lon}&radius=${radius}&categories=13003&limit=50&fields=fsq_id,name,geocodes,rating,hours,social_media`,
+            `https://api.foursquare.com/v3/places/search?ll=${lat},${lon}&radius=${radius}&categories=13003,13029,13065&limit=50&fields=fsq_id,name,geocodes,rating,hours,social_media`,
             { headers: { Authorization: key } },
           );
           if (!res.ok) return [];
@@ -716,12 +716,16 @@
           const fl = fsq.geocodes?.main?.latitude,
             fo = fsq.geocodes?.main?.longitude;
           if (!fl || !fo) return;
-          const hit = pubs.find(
-            (p) =>
-              haversine(p.lat, p.lon, fl, fo) < 80 ||
-              (haversine(p.lat, p.lon, fl, fo) < 200 &&
-                normName(p.name) === normName(fsq.name)),
-          );
+          const fn = normName(fsq.name);
+          const hit = pubs.find((p) => {
+            const d = haversine(p.lat, p.lon, fl, fo);
+            if (d < 100) return true;
+            if (d < 350) {
+              const pn = normName(p.name);
+              return pn === fn || pn.includes(fn) || fn.includes(pn);
+            }
+            return false;
+          });
           if (!hit) return;
           hit.fsqId = fsq.fsq_id;
           if (fsq.rating != null) hit.fsqRating = fsq.rating;
@@ -1103,12 +1107,17 @@ out center body;`;
             `<div class="results-header">${n} pub${n !== 1 ? "s" : ""}</div>` +
             visiblePubs
               .map((pub) => {
+                const hoursSource = pub.fsqId
+                  ? ""
+                  : ' title="From OSM — may be inaccurate"';
                 const openHtml =
                   pub.open === true
-                    ? `<span class="open-badge">Open now</span>`
+                    ? `<span class="open-badge"${hoursSource}>Open now</span>`
                     : pub.open === false
-                      ? `<span class="dim-badge">May be closed</span>`
-                      : `<span class="dim-badge">Hours unknown</span>`;
+                      ? `<span class="dim-badge"${hoursSource}>May be closed</span>`
+                      : pub.fsqId
+                        ? `<span class="dim-badge">No hours listed</span>`
+                        : `<span class="dim-badge">Hours unknown</span>`;
                 const sel = S.selected?.id === pub.id;
                 const awardPill = pub.award
                   ? `<span class="pill trophy">🏆 Award winner</span>`

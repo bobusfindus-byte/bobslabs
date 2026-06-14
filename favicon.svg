@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <rect width="180" height="180" fill="#0d1117"/>
+  <circle cx="90" cy="90" r="74" fill="#f59e0b"/>
+  <!-- flask neck -->
+  <rect x="78" y="38" width="24" height="50" fill="#0d1117"/>
+  <!-- flask shoulders -->
+  <path d="M78 88 L52 114 A38 38 0 0 0 128 114 L102 88 Z" fill="#0d1117"/>
+  <!-- flask body -->
+  <circle cx="90" cy="114" r="38" fill="#0d1117"/>
+</svg>

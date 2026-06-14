@@ -1053,7 +1053,8 @@ out center body;`;
         }
       }
 
-      function filterByTag(tag) {
+      function filterByTag(tag, e) {
+        if (e) e.stopPropagation();
         S.tagFilter = S.tagFilter === tag ? null : tag;
         render();
       }
@@ -1214,7 +1215,7 @@ out center body;`;
                       : `<span class="dim-badge">Hours unknown</span>`;
                 const sel = S.selected?.id === pub.id;
                 const awardPill = pub.award
-                  ? `<span class="pill trophy${S.tagFilter === "🏆 Award winner" ? " tag-active" : ""}" onclick="filterByTag('🏆 Award winner');event.stopPropagation()">🏆 Award winner</span>`
+                  ? `<span class="pill trophy${S.tagFilter === "🏆 Award winner" ? " tag-active" : ""}" data-tag="🏆 Award winner" onclick="filterByTag(this.dataset.tag,event)">🏆 Award winner</span>`
                   : "";
                 const fsqChip =
                   pub.fsqRating != null
@@ -1225,7 +1226,7 @@ out center body;`;
                   : "";
                 const pillsRow =
                   pub.award || pub.badges.length
-                    ? `<div class="pills">${awardPill}${pub.badges.map((b) => `<span class="pill${b.gold ? " gold" : ""}${S.tagFilter === b.t ? " tag-active" : ""}" onclick="filterByTag(${JSON.stringify(b.t)});event.stopPropagation()">${b.t}</span>`).join("")}</div>`
+                    ? `<div class="pills">${awardPill}${pub.badges.map((b) => `<span class="pill${b.gold ? " gold" : ""}${S.tagFilter === b.t ? " tag-active" : ""}" data-tag="${b.t.replace(/"/g, "&quot;")}" onclick="filterByTag(this.dataset.tag,event)">${b.t}</span>`).join("")}</div>`
                     : "";
                 return `<div class="pub-card${sel ? " selected" : ""}" id="card-${pub.id}" onclick="selectPub(${pub.id})">
   <div class="card-top">

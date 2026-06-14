@@ -293,6 +293,113 @@
       .bottom-pad {
         height: calc(var(--safe-bottom) + 32px);
       }
+
+      /* ── Settings ── */
+      .settings-btn {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text-dim);
+        font-size: 16px;
+        padding: 5px 9px;
+        cursor: pointer;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .settings-btn.active {
+        border-color: var(--amber);
+        color: var(--amber);
+      }
+      .settings-panel {
+        padding: 12px 16px 14px;
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .settings-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .settings-label {
+        font-size: 12px;
+        color: var(--text-dim);
+        font-weight: 600;
+        flex-shrink: 0;
+        width: 68px;
+      }
+      .settings-input {
+        flex: 1;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 13px;
+        padding: 6px 10px;
+        outline: none;
+      }
+      .settings-input:focus {
+        border-color: var(--amber);
+      }
+      .settings-save {
+        background: var(--amber);
+        border: none;
+        border-radius: 8px;
+        color: #000;
+        font-family: var(--font);
+        font-size: 13px;
+        font-weight: 700;
+        padding: 6px 12px;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      .settings-note {
+        font-size: 11px;
+        color: var(--text-dim);
+        line-height: 1.5;
+        margin-top: 4px;
+      }
+      .settings-note a {
+        color: var(--amber);
+        text-decoration: none;
+      }
+
+      /* ── FSQ rating chip ── */
+      .fsq-rating {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 7px;
+        border-radius: 6px;
+        background: rgba(74, 158, 255, 0.12);
+        color: #4a9eff;
+        white-space: nowrap;
+      }
+
+      /* ── Instagram link ── */
+      .ig-link {
+        font-size: 18px;
+        text-decoration: none;
+        opacity: 0.6;
+        transition: opacity 0.15s;
+        flex-shrink: 0;
+      }
+      .ig-link:hover {
+        opacity: 1;
+      }
+
+      .footer-links {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      /* ── Award badge pill ── */
+      .pill.trophy {
+        border-color: rgba(250, 204, 21, 0.5);
+        color: #facc15;
+        background: rgba(250, 204, 21, 0.08);
+      }
     </style>
   </head>
   <body>
@@ -308,6 +415,57 @@
         selected: null,
         errMsg: "",
       };
+
+      // ── Award winners (GBPA + NPBA 2025) ──────────────────────────────────────
+      const AWARD_WINNERS = [
+        // Great British Pub Awards 2025
+        "Crown Wharf",
+        "Blind Jacks",
+        "Chaplins",
+        "Fleece Inn",
+        "The Old Duke",
+        "Keynsham Courtyard",
+        "Perry Hill Pub",
+        "The Bull",
+        "Myrtle Tavern",
+        "Pinnacle Sports",
+        "The George",
+        "The Gasoline",
+        "The Star",
+        "Manor House of Whittington",
+        "Anglesey Arms",
+        "The Black Pug",
+        "Fox Keston",
+        // National Pub & Bar Awards 2025
+        "The Tollemache Arms",
+        "The Black Swan Inn",
+        "The Barrelman",
+        "Britannia Inn",
+        "The Gunton Arms",
+        "The Bulls Head",
+        "Kenmuir Arms",
+        "The Wildmoor Oak",
+        "The Red Lion and Sun",
+        "Dundrum Inn",
+        "The Beckford Arms",
+      ];
+
+      function normName(n) {
+        return (n || "")
+          .toLowerCase()
+          .replace(/^the\s+/, "")
+          .replace(/[''&]/g, " ")
+          .replace(/[^a-z0-9\s]/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+      function isAwardWinner(name) {
+        const n = normName(name);
+        return AWARD_WINNERS.some((w) => {
+          const wn = normName(w);
+          return n === wn || n.startsWith(wn) || wn.startsWith(n);
+        });
+      }
 
       // ── Chain blacklist ────────────────────────────────────────────────────────
       const CHAINS = [
@@ -338,6 +496,7 @@
         if (tags.food === "yes" || tags.cuisine) s += 1;
         if (tags.real_fire === "yes") s += 1;
         if (tags.website) s += 1;
+        if (isAwardWinner(name)) s += 3;
         return Math.min(10, s);
       }
 
@@ -408,6 +567,65 @@
       }
 
       // Best-effort opening hours check
+      // ── Foursquare ─────────────────────────────────────────────────────────────
+      const FSQ_LS = "pubfinder_fsq_key";
+      function getFsqKey() {
+        return localStorage.getItem(FSQ_LS) || "";
+      }
+      function saveFsqKey(k) {
+        k
+          ? localStorage.setItem(FSQ_LS, k.trim())
+          : localStorage.removeItem(FSQ_LS);
+      }
+
+      async function fetchFsqPubs(lat, lon, radius) {
+        const key = getFsqKey();
+        if (!key) return [];
+        try {
+          const res = await fetch(
+            `https://api.foursquare.com/v3/places/search?ll=${lat},${lon}&radius=${radius}&categories=13003&limit=50&fields=fsq_id,name,geocodes,rating`,
+            { headers: { Authorization: key } },
+          );
+          if (!res.ok) return [];
+          return (await res.json()).results || [];
+        } catch (e) {
+          return [];
+        }
+      }
+
+      function mergeFsq(pubs, fsqResults) {
+        fsqResults.forEach((fsq) => {
+          const fl = fsq.geocodes?.main?.latitude,
+            fo = fsq.geocodes?.main?.longitude;
+          if (!fl || !fo) return;
+          const hit = pubs.find(
+            (p) =>
+              haversine(p.lat, p.lon, fl, fo) < 80 ||
+              (haversine(p.lat, p.lon, fl, fo) < 200 &&
+                normName(p.name) === normName(fsq.name)),
+          );
+          if (hit && fsq.rating != null) {
+            hit.fsqRating = fsq.rating;
+            hit.fsqId = fsq.fsq_id;
+          }
+        });
+      }
+
+      // ── Instagram ──────────────────────────────────────────────────────────────
+      function instagramLink(tags) {
+        const h =
+          tags["contact:instagram"] ||
+          tags["social:instagram"] ||
+          tags["instagram"];
+        if (!h) return null;
+        const clean = h
+          .replace(/^@/, "")
+          .replace(/https?:\/\/(www\.)?instagram\.com\//, "")
+          .replace(/\/$/, "");
+        return `https://www.instagram.com/${clean}`;
+      }
+
+      // ── Opening hours ──────────────────────────────────────────────────────────
       function openStatus(h) {
         if (!h) return null;
         try {
@@ -441,7 +659,7 @@ out center body;`;
         });
         if (!res.ok) throw new Error("Overpass error");
         const data = await res.json();
-        return data.elements
+        const pubs = data.elements
           .filter((el) => el.tags?.name)
           .map((el) => {
             const lat2 = el.lat ?? el.center?.lat;
@@ -459,12 +677,26 @@ out center body;`;
               dist: haversine(lat, lon, lat2, lon2),
               bearing: bearingDeg(lat, lon, lat2, lon2),
               open: openStatus(tags.opening_hours),
+              award: isAwardWinner(name),
+              igLink: instagramLink(tags),
+              fsqRating: null,
+              fsqId: null,
               cx: 0,
-              cy: 0, // set during radar draw
+              cy: 0,
             };
           })
           .filter((p) => p.score >= 4 && p.lat != null && p.lon != null)
           .sort((a, b) => b.score - a.score);
+
+        const key = getFsqKey();
+        if (key) {
+          try {
+            const fsqResults = await fetchFsqPubs(lat, lon, radius, key);
+            mergeFsq(pubs, fsqResults);
+          } catch (_) {}
+        }
+
+        return pubs;
       }
 
       // ── Radar ──────────────────────────────────────────────────────────────────
@@ -641,12 +873,42 @@ out center body;`;
         }
       }
 
+      // ── Settings ───────────────────────────────────────────────────────────────
+      let settingsOpen = false;
+      function toggleSettings() {
+        settingsOpen = !settingsOpen;
+        render();
+        if (settingsOpen) {
+          requestAnimationFrame(() => {
+            document.getElementById("fsq-key-input")?.focus();
+          });
+        }
+      }
+      function saveAndCloseSettings() {
+        const val = document.getElementById("fsq-key-input")?.value ?? "";
+        saveFsqKey(val);
+        settingsOpen = false;
+        render();
+      }
+
       // ── HTML ───────────────────────────────────────────────────────────────────
       function header() {
+        const panel = settingsOpen
+          ? `<div class="settings-panel">
+  <div class="settings-row">
+    <label class="settings-label" for="fsq-key-input">Foursquare API key</label>
+    <input class="settings-input" id="fsq-key-input" type="password" placeholder="Paste key here…" value="${getFsqKey()}">
+  </div>
+  <div class="settings-note">Optional. Adds Foursquare ratings to pub cards. Get a free key at foursquare.com/developer — stored locally, never sent anywhere else.</div>
+  <button class="settings-save" onclick="saveAndCloseSettings()">Save &amp; close</button>
+</div>`
+          : "";
         return `<div class="header">
   <div class="top-row">
     <span class="app-title">🍺 Good Pubs Near Me</span>
+    <button class="settings-btn" onclick="toggleSettings()" title="Settings">⚙️</button>
   </div>
+  ${panel}
   <div class="search-row">
     <input class="search-input" id="si" type="search" placeholder="Search a neighbourhood…" autocomplete="off" spellcheck="false">
     <button class="locate-btn" onclick="locate()">📍 Find Me</button>
@@ -702,18 +964,35 @@ out center body;`;
                       ? `<span class="dim-badge">May be closed</span>`
                       : `<span class="dim-badge">Hours unknown</span>`;
                 const sel = S.selected?.id === pub.id;
+                const awardPill = pub.award
+                  ? `<span class="pill trophy">🏆 Award winner</span>`
+                  : "";
+                const fsqChip =
+                  pub.fsqRating != null
+                    ? `<span class="fsq-rating">★ ${pub.fsqRating.toFixed(1)}</span>`
+                    : "";
+                const igBtn = pub.igLink
+                  ? `<a class="ig-link" href="${pub.igLink}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📸</a>`
+                  : "";
+                const pillsRow =
+                  pub.award || pub.badges.length
+                    ? `<div class="pills">${awardPill}${pub.badges.map((b) => `<span class="pill${b.gold ? " gold" : ""}">${b.t}</span>`).join("")}</div>`
+                    : "";
                 return `<div class="pub-card${sel ? " selected" : ""}" id="card-${pub.id}" onclick="selectPub(${pub.id})">
   <div class="card-top">
     <div>
-      <div class="pub-name">${pub.name}</div>
+      <div class="pub-name">${pub.name}${fsqChip}</div>
       <div class="pub-meta">${fmtDist(pub.dist)} · ${compass(pub.bearing)}</div>
     </div>
     <div class="pint-score">${pints(pub.score)}</div>
   </div>
-  ${pub.badges.length ? `<div class="pills">${pub.badges.map((b) => `<span class="pill${b.gold ? " gold" : ""}">${b.t}</span>`).join("")}</div>` : ""}
+  ${pillsRow}
   <div class="card-footer">
     ${openHtml}
-    <a class="maps-link" href="${mapsLink(pub.name, pub.lat, pub.lon)}" target="_blank" rel="noopener">Directions →</a>
+    <span class="footer-links">
+      ${igBtn}
+      <a class="maps-link" href="${mapsLink(pub.name, pub.lat, pub.lon)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Directions →</a>
+    </span>
   </div>
 </div>`;
               })

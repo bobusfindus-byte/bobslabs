@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bob's Labs</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --bg: #0d1117;
+        --surface: #161b22;
+        --border: rgba(255, 255, 255, 0.08);
+        --text: #e6edf3;
+        --text-dim: #8b949e;
+        --amber: #f59e0b;
+        --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --safe-bottom: env(safe-area-inset-bottom, 0px);
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font);
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 48px 20px calc(48px + var(--safe-bottom));
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 48px;
+      }
+
+      .logo {
+        font-size: 48px;
+        margin-bottom: 12px;
+        display: block;
+      }
+
+      h1 {
+        font-size: clamp(28px, 6vw, 40px);
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        color: var(--text);
+      }
+
+      .tagline {
+        font-size: 15px;
+        color: var(--text-dim);
+        margin-top: 8px;
+        line-height: 1.5;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 16px;
+        width: 100%;
+        max-width: 900px;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        text-decoration: none;
+        color: inherit;
+        transition:
+          border-color 0.15s,
+          transform 0.15s;
+      }
+
+      .card:hover {
+        border-color: rgba(245, 158, 11, 0.4);
+        transform: translateY(-2px);
+      }
+
+      .card-icon {
+        font-size: 32px;
+        line-height: 1;
+      }
+
+      .card-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text);
+      }
+
+      .card-desc {
+        font-size: 14px;
+        color: var(--text-dim);
+        line-height: 1.55;
+        flex: 1;
+      }
+
+      .card-launch {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 4px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--amber);
+      }
+
+      .card-launch svg {
+        width: 13px;
+        height: 13px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex-shrink: 0;
+      }
+
+      footer {
+        margin-top: 56px;
+        font-size: 12px;
+        color: var(--text-dim);
+        text-align: center;
+      }
+
+      footer a {
+        color: var(--text-dim);
+        text-decoration: none;
+      }
+
+      footer a:hover {
+        color: var(--amber);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="logo">🧪</span>
+      <h1>Bob's Labs</h1>
+      <p class="tagline">
+        Single-file web experiments. Open in browser and go.
+      </p>
+    </header>
+
+    <div class="grid">
+      <a class="card" href="darksky_4.html">
+        <div class="card-icon">🌦</div>
+        <div class="card-title">DarkSky</div>
+        <div class="card-desc">
+          Dark, minimal weather app. Hourly timeline, 7-day strip, hyperlocal
+          precip alerts, and Disco mode.
+        </div>
+        <span class="card-launch"
+          >Launch
+          <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+        </span>
+      </a>
+
+      <a class="card" href="skyview.html">
+        <div class="card-icon">🌅</div>
+        <div class="card-title">SkyView</div>
+        <div class="card-desc">
+          Dual-view weather. Living Sky shows an animated canvas that matches
+          the actual sky. Day Clock is a 24-hour analog face coloured by
+          condition.
+        </div>
+        <span class="card-launch"
+          >Launch
+          <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+        </span>
+      </a>
+
+      <a class="card" href="pubfinder.html">
+        <div class="card-icon">🍺</div>
+        <div class="card-title">Pub Finder</div>
+        <div class="card-desc">
+          Good pubs near you — real ale, decent vibes, no dives. Sonar radar,
+          Vibe Score, award badges, and Foursquare ratings.
+        </div>
+        <span class="card-launch"
+          >Launch
+          <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+        </span>
+      </a>
+    </div>
+
+    <footer>
+      <a
+        href="https://github.com/bobusfindus-byte/bobslabs"
+        target="_blank"
+        rel="noopener"
+        >GitHub</a
+      >
+      &nbsp;·&nbsp; No build step. No npm. No nonsense.
+    </footer>
+  </body>
+</html>

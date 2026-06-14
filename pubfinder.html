@@ -1084,7 +1084,8 @@ out center body;`;
             return;
           }
           if (!res.ok) {
-            el.textContent = `✗ API error ${res.status}`;
+            const body = await res.text().catch(() => "");
+            el.textContent = `✗ API error ${res.status}: ${body.slice(0, 120)}`;
             el.className = "fsq-test fail";
             return;
           }

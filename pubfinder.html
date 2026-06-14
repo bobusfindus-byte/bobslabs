@@ -1090,7 +1090,11 @@ out center body;`;
           const withIg = results.filter(
             (r) => r.social_media?.instagram,
           ).length;
-          el.textContent = `✓ Proxy works — ${results.length} venues, ${withHours} with hours, ${withIg} with Instagram`;
+          const hoursSnippet =
+            results[0]?.hours !== undefined
+              ? JSON.stringify(results[0].hours).slice(0, 200)
+              : `keys: ${Object.keys(results[0] || {}).join(", ")}`;
+          el.textContent = `✓ ${results.length} venues, ${withIg} Instagram. hours field: ${hoursSnippet}`;
           el.className = "fsq-test ok";
         } catch (e) {
           el.textContent = `✗ ${e.message}`;

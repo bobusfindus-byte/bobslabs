@@ -728,11 +728,17 @@
         if (!key) return [];
         try {
           const res = await fetch(
-            `https://api.foursquare.com/v3/places/search?ll=${lat},${lon}&radius=${radius}&categories=13003,13029,13065&limit=50&fields=fsq_id,name,geocodes,rating,hours,social_media`,
-            { headers: { Authorization: `Bearer ${key}` } },
+            `https://places-api.foursquare.com/places/search?ll=${lat},${lon}&radius=${radius}&fsq_category_ids=13003,13029,13065&limit=50`,
+            {
+              headers: {
+                Authorization: `Bearer ${key}`,
+                "X-Places-Api-Version": "2025-06-17",
+              },
+            },
           );
           if (!res.ok) return [];
-          return (await res.json()).results || [];
+          const data = await res.json();
+          return data.results || data.places || [];
         } catch (e) {
           return [];
         }
@@ -1070,34 +1076,27 @@ out center body;`;
         const lon = S.lon ?? -0.1278;
         try {
           const res = await fetch(
-            `https://api.foursquare.com/v3/places/search?ll=${lat},${lon}&radius=500&categories=13003,13029,13065&limit=5&fields=fsq_id,name,hours,social_media`,
-            { headers: { Authorization: `Bearer ${key}` } },
+            `https://places-api.foursquare.com/places/search?ll=${lat},${lon}&radius=500&fsq_category_ids=13003,13029,13065&limit=5`,
+            {
+              headers: {
+                Authorization: `Bearer ${key}`,
+                "X-Places-Api-Version": "2025-06-17",
+              },
+            },
           );
-          if (res.status === 401) {
-            el.textContent = "✗ Invalid key (401)";
-            el.className = "fsq-test fail";
-            return;
-          }
-          if (res.status === 403) {
-            el.textContent = "✗ Key has no access (403)";
-            el.className = "fsq-test fail";
-            return;
-          }
           if (!res.ok) {
             const body = await res.text().catch(() => "");
-            el.textContent = `✗ API error ${res.status}: ${body.slice(0, 120)}`;
+            el.textContent = `✗ ${res.status}: ${body.slice(0, 400)}`;
             el.className = "fsq-test fail";
             return;
           }
           const data = await res.json();
-          const results = data.results || [];
-          const withHours = results.filter(
-            (r) => r.hours?.open_now != null,
-          ).length;
-          const withIg = results.filter(
-            (r) => r.social_media?.instagram,
-          ).length;
-          el.textContent = `✓ Key works — ${results.length} venues found, ${withHours} with hours, ${withIg} with Instagram`;
+          const results = data.results || data.places || [];
+          // Show first result's keys so we can verify field names
+          const sample = results[0]
+            ? Object.keys(results[0]).join(", ")
+            : "no results";
+          el.textContent = `✓ Key works — ${results.length} venues. Fields: ${sample}`;
           el.className = "fsq-test ok";
         } catch (e) {
           el.textContent = `✗ Network error: ${e.message}`;

@@ -768,6 +768,26 @@
         });
       }
 
+      async function enrichFsqDetails(pubs) {
+        const proxy = getProxyUrl();
+        if (!proxy) return;
+        const matched = pubs.filter((p) => p.fsqId).slice(0, 10);
+        await Promise.all(
+          matched.map(async (pub) => {
+            try {
+              const res = await fetch(
+                `${proxy}/places/${pub.fsqId}?fields=hours,rating`,
+              );
+              if (!res.ok) return;
+              const d = await res.json();
+              const openNow = d.hours?.open_now ?? d.hours?.is_open_now;
+              if (openNow != null) pub.open = openNow;
+              if (d.rating != null) pub.fsqRating = d.rating;
+            } catch (_) {}
+          }),
+        );
+      }
+
       // ── Instagram ──────────────────────────────────────────────────────────────
       function instagramLink(tags) {
         const h =
@@ -850,6 +870,7 @@ out center body;`;
           try {
             const fsqResults = await fetchFsqPubs(lat, lon, radius);
             mergeFsq(pubs, fsqResults);
+            await enrichFsqDetails(pubs);
           } catch (_) {}
         }
 
@@ -1080,17 +1101,33 @@ out center body;`;
           }
           const data = await res.json();
           const results = data.results || data.places || [];
-          const withHours = results.filter(
-            (r) => r.hours?.open_now != null || r.hours?.is_open_now != null,
-          ).length;
           const withIg = results.filter(
             (r) => r.social_media?.instagram,
           ).length;
-          const hoursSnippet =
-            results[0]?.hours !== undefined
-              ? JSON.stringify(results[0].hours).slice(0, 200)
-              : "no hours field";
-          el.textContent = `✓ Proxy works — ${results.length} venues, ${withHours} with hours, ${withIg} with Instagram. hours: ${hoursSnippet}`;
+          let hoursNote = "";
+          const firstId = results[0]?.fsq_place_id;
+          if (firstId) {
+            try {
+              const dr = await fetch(
+                `${url.replace(/\/$/, "")}/places/${firstId}?fields=hours,rating`,
+              );
+              if (dr.ok) {
+                const dd = await dr.json();
+                const openNow = dd.hours?.open_now ?? dd.hours?.is_open_now;
+                hoursNote =
+                  openNow != null
+                    ? ` · hours ✓ (${openNow ? "open" : "closed"})`
+                    : dd.hours
+                      ? " · hours field present but no open_now"
+                      : " · no hours in detail response";
+              } else {
+                hoursNote = ` · detail call failed (${dr.status})`;
+              }
+            } catch (e) {
+              hoursNote = ` · detail error: ${e.message}`;
+            }
+          }
+          el.textContent = `✓ ${results.length} venues, ${withIg} with Instagram${hoursNote}`;
           el.className = "fsq-test ok";
         } catch (e) {
           el.textContent = `✗ ${e.message}`;

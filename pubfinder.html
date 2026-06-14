@@ -728,12 +728,7 @@
         if (!proxy) return [];
         try {
           const res = await fetch(
-            `${proxy}?ll=${lat},${lon}&radius=${radius}&limit=50`,
-            {
-              headers: {
-                "Content-Type": "application/json",
-              },
-            },
+            `${proxy}?ll=${lat},${lon}&radius=${radius}&limit=50&fields=fsq_place_id,name,latitude,longitude,hours,rating,social_media`,
           );
           if (!res.ok) return [];
           const data = await res.json();
@@ -745,8 +740,8 @@
 
       function mergeFsq(pubs, fsqResults) {
         fsqResults.forEach((fsq) => {
-          const fl = fsq.geocodes?.main?.latitude,
-            fo = fsq.geocodes?.main?.longitude;
+          const fl = fsq.latitude,
+            fo = fsq.longitude;
           if (!fl || !fo) return;
           const fn = normName(fsq.name);
           const hit = pubs.find((p) => {
@@ -759,9 +754,10 @@
             return false;
           });
           if (!hit) return;
-          hit.fsqId = fsq.fsq_id;
+          hit.fsqId = fsq.fsq_place_id;
           if (fsq.rating != null) hit.fsqRating = fsq.rating;
-          if (fsq.hours?.open_now != null) hit.open = fsq.hours.open_now;
+          const openNow = fsq.hours?.open_now ?? fsq.hours?.is_open_now;
+          if (openNow != null) hit.open = openNow;
           if (!hit.igLink && fsq.social_media?.instagram) {
             const handle = fsq.social_media.instagram
               .replace(/^@/, "")
@@ -1085,7 +1081,7 @@ out center body;`;
           const data = await res.json();
           const results = data.results || data.places || [];
           const withHours = results.filter(
-            (r) => r.hours?.open_now != null,
+            (r) => r.hours?.open_now != null || r.hours?.is_open_now != null,
           ).length;
           const withIg = results.filter(
             (r) => r.social_media?.instagram,
@@ -1093,8 +1089,8 @@ out center body;`;
           const hoursSnippet =
             results[0]?.hours !== undefined
               ? JSON.stringify(results[0].hours).slice(0, 200)
-              : `keys: ${Object.keys(results[0] || {}).join(", ")}`;
-          el.textContent = `✓ ${results.length} venues, ${withIg} Instagram. hours field: ${hoursSnippet}`;
+              : "no hours field";
+          el.textContent = `✓ Proxy works — ${results.length} venues, ${withHours} with hours, ${withIg} with Instagram. hours: ${hoursSnippet}`;
           el.className = "fsq-test ok";
         } catch (e) {
           el.textContent = `✗ ${e.message}`;

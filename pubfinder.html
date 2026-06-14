@@ -701,7 +701,7 @@
         if (!key) return [];
         try {
           const res = await fetch(
-            `https://api.foursquare.com/v3/places/search?ll=${lat},${lon}&radius=${radius}&categories=13003&limit=50&fields=fsq_id,name,geocodes,rating`,
+            `https://api.foursquare.com/v3/places/search?ll=${lat},${lon}&radius=${radius}&categories=13003&limit=50&fields=fsq_id,name,geocodes,rating,hours,social_media`,
             { headers: { Authorization: key } },
           );
           if (!res.ok) return [];
@@ -722,9 +722,16 @@
               (haversine(p.lat, p.lon, fl, fo) < 200 &&
                 normName(p.name) === normName(fsq.name)),
           );
-          if (hit && fsq.rating != null) {
-            hit.fsqRating = fsq.rating;
-            hit.fsqId = fsq.fsq_id;
+          if (!hit) return;
+          hit.fsqId = fsq.fsq_id;
+          if (fsq.rating != null) hit.fsqRating = fsq.rating;
+          if (fsq.hours?.open_now != null) hit.open = fsq.hours.open_now;
+          if (!hit.igLink && fsq.social_media?.instagram) {
+            const handle = fsq.social_media.instagram
+              .replace(/^@/, "")
+              .replace(/https?:\/\/(www\.)?instagram\.com\//, "")
+              .replace(/\/$/, "");
+            hit.igLink = `https://www.instagram.com/${handle}`;
           }
         });
       }

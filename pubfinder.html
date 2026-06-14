@@ -771,21 +771,20 @@
       async function enrichFsqDetails(pubs) {
         const proxy = getProxyUrl();
         if (!proxy) return;
-        const matched = pubs.filter((p) => p.fsqId).slice(0, 10);
-        await Promise.all(
-          matched.map(async (pub) => {
-            try {
-              const res = await fetch(
-                `${proxy}/places/${pub.fsqId}?fields=hours,rating`,
-              );
-              if (!res.ok) return;
-              const d = await res.json();
-              const openNow = d.hours?.open_now ?? d.hours?.is_open_now;
-              if (openNow != null) pub.open = openNow;
-              if (d.rating != null) pub.fsqRating = d.rating;
-            } catch (_) {}
-          }),
-        );
+        const matched = pubs.filter((p) => p.fsqId).slice(0, 5);
+        for (const pub of matched) {
+          try {
+            const res = await fetch(
+              `${proxy}/places/${pub.fsqId}?fields=hours,rating`,
+            );
+            if (!res.ok) break;
+            const d = await res.json();
+            const openNow = d.hours?.open_now ?? d.hours?.is_open_now;
+            if (openNow != null) pub.open = openNow;
+            if (d.rating != null) pub.fsqRating = d.rating;
+          } catch (_) {}
+          await new Promise((r) => setTimeout(r, 250));
+        }
       }
 
       // ── Instagram ──────────────────────────────────────────────────────────────

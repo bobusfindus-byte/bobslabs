@@ -156,9 +156,12 @@
         height: 15px;
         cursor: pointer;
       }
-      .filter-note {
-        font-size: 11px;
-        color: var(--text-dim);
+      .filter-toggle.active {
+        color: var(--amber);
+      }
+      .filter-toggle-icon {
+        font-size: 15px;
+        line-height: 1;
       }
 
       /* ── Radar ── */
@@ -442,6 +445,7 @@
         radius: 1000,
         selected: null,
         showAll: false,
+        hifiOnly: false,
         errMsg: "",
       };
 
@@ -519,6 +523,39 @@
         );
       }
 
+      const HIFI_KEYWORDS = [
+        "hifi",
+        "hi-fi",
+        "hi fi",
+        "audiophile",
+        "high fidelity",
+        "funktion-one",
+        "funktion one",
+        "klipsch",
+        "tannoy",
+        "bowers",
+        "vinyl",
+        "turntable",
+        "sound system",
+      ];
+
+      function isHifi(tags, name) {
+        if (tags.sound_system) return true;
+        const text = [
+          tags.description,
+          tags.note,
+          tags.name,
+          tags["description:en"],
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (HIFI_KEYWORDS.some((w) => text.includes(w))) return true;
+        const notable = getNotable(name, tags);
+        if (notable?.badge.toLowerCase().includes("audiophile")) return true;
+        return false;
+      }
+
       // ── Chain blacklist ────────────────────────────────────────────────────────
       const CHAINS = [
         "wetherspoon",
@@ -558,6 +595,8 @@
         if (isAwardWinner(name)) s += 3;
         const notable = getNotable(name, tags);
         if (notable) s += notable.pts;
+        if (isHifi(tags, name)) s += 3;
+        if (tags.sound_system) s += 1;
         return Math.min(10, s);
       }
 
@@ -587,6 +626,13 @@
         if (tags.wheelchair === "yes") b.push({ t: "Accessible", gold: false });
         const notable = getNotable(tags.name || "", tags);
         if (notable) b.push({ t: notable.badge, gold: true });
+        if (isHifi(tags, tags.name || "")) {
+          const sysLabel = tags.sound_system
+            ? `🔊 ${tags.sound_system}`
+            : "🔊 Hi-Fi";
+          if (!b.some((x) => x.t.startsWith("🔊")))
+            b.push({ t: sysLabel, gold: true });
+        }
         return b;
       }
 
@@ -750,6 +796,7 @@ out center body;`;
               bearing: bearingDeg(lat, lon, lat2, lon2),
               open: openStatus(tags.opening_hours),
               award: isAwardWinner(name),
+              hifi: isHifi(tags, name),
               igLink: instagramLink(tags),
               fsqRating: null,
               fsqId: null,
@@ -948,7 +995,9 @@ out center body;`;
       }
 
       function getVisiblePubs() {
-        return S.showAll ? S.pubs : S.pubs.filter((p) => p.score >= 4);
+        let pubs = S.showAll ? S.pubs : S.pubs.filter((p) => p.score >= 4);
+        if (S.hifiOnly) pubs = pubs.filter((p) => p.hifi);
+        return pubs;
       }
 
       // ── Settings ───────────────────────────────────────────────────────────────
@@ -1022,11 +1071,14 @@ out center body;`;
 </div>`;
 
         const filterBar = `<div class="filter-bar">
+  <label class="filter-toggle${S.hifiOnly ? " active" : ""}" onclick="S.hifiOnly=!S.hifiOnly;render()">
+    <span class="filter-toggle-icon">🔊</span>
+    <span>Hi-Fi only</span>
+  </label>
   <label class="filter-toggle">
     <input type="checkbox" ${S.showAll ? "checked" : ""} onchange="S.showAll=this.checked;render()">
-    <span>Show all pubs</span>
+    <span>Show all</span>
   </label>
-  <span class="filter-note">${S.showAll ? "Showing everything incl. chains &amp; dives" : "Low-scored &amp; chains hidden"}</span>
 </div>`;
 
         const radar = `<div class="radar-wrap"><canvas id="radar"></canvas></div>`;
@@ -1036,7 +1088,7 @@ out center body;`;
         if (!visiblePubs.length) {
           cards = `<div class="empty-state">
   <div class="big">🙈</div>
-  No pubs found within ${fmtDist(S.radius)}. Try a larger radius${S.showAll ? "" : " or toggle Show all pubs"}.
+  ${S.hifiOnly ? "No hi-fi pubs found within " + fmtDist(S.radius) + ". Try a larger radius or turn off Hi-Fi filter." : "No pubs found within " + fmtDist(S.radius) + ". Try a larger radius" + (S.showAll ? "." : " or toggle Show all.")}
 </div>`;
         } else {
           const n = visiblePubs.length;

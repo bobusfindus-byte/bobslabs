@@ -385,6 +385,33 @@
         cursor: pointer;
         flex-shrink: 0;
       }
+      .settings-test {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text-dim);
+        font-family: var(--font);
+        font-size: 13px;
+        font-weight: 600;
+        padding: 6px 12px;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      .fsq-test {
+        font-size: 12px;
+        line-height: 1.5;
+        min-height: 16px;
+        margin-bottom: 6px;
+      }
+      .fsq-test.ok {
+        color: #4ade80;
+      }
+      .fsq-test.fail {
+        color: #f87171;
+      }
+      .fsq-test.warn {
+        color: var(--amber);
+      }
       .settings-note {
         font-size: 11px;
         color: var(--text-dim);
@@ -1029,6 +1056,54 @@ out center body;`;
         render();
       }
 
+      async function testFsqKey() {
+        const key = document.getElementById("fsq-key-input")?.value.trim();
+        const el = document.getElementById("fsq-test-result");
+        if (!key) {
+          el.textContent = "⚠️ No key entered";
+          el.className = "fsq-test warn";
+          return;
+        }
+        el.textContent = "Testing…";
+        el.className = "fsq-test";
+        const lat = S.lat ?? 51.5074;
+        const lon = S.lon ?? -0.1278;
+        try {
+          const res = await fetch(
+            `https://api.foursquare.com/v3/places/search?ll=${lat},${lon}&radius=500&categories=13003,13029,13065&limit=5&fields=fsq_id,name,hours,social_media`,
+            { headers: { Authorization: key } },
+          );
+          if (res.status === 401) {
+            el.textContent = "✗ Invalid key (401)";
+            el.className = "fsq-test fail";
+            return;
+          }
+          if (res.status === 403) {
+            el.textContent = "✗ Key has no access (403)";
+            el.className = "fsq-test fail";
+            return;
+          }
+          if (!res.ok) {
+            el.textContent = `✗ API error ${res.status}`;
+            el.className = "fsq-test fail";
+            return;
+          }
+          const data = await res.json();
+          const results = data.results || [];
+          const withHours = results.filter(
+            (r) => r.hours?.open_now != null,
+          ).length;
+          const withIg = results.filter(
+            (r) => r.social_media?.instagram,
+          ).length;
+          el.textContent = `✓ Key works — ${results.length} venues found, ${withHours} with hours, ${withIg} with Instagram`;
+          el.className = "fsq-test ok";
+        } catch (e) {
+          el.textContent = `✗ Network error: ${e.message}`;
+          el.className = "fsq-test fail";
+        }
+      }
+
       // ── HTML ───────────────────────────────────────────────────────────────────
       function header() {
         const panel = settingsOpen
@@ -1037,8 +1112,12 @@ out center body;`;
     <label class="settings-label" for="fsq-key-input">Foursquare API key</label>
     <input class="settings-input" id="fsq-key-input" type="password" placeholder="Paste key here…" value="${getFsqKey()}">
   </div>
-  <div class="settings-note">Optional. Adds Foursquare ratings to pub cards. Get a free key at foursquare.com/developer — stored locally, never sent anywhere else.</div>
-  <button class="settings-save" onclick="saveAndCloseSettings()">Save &amp; close</button>
+  <div class="settings-row">
+    <button class="settings-save" onclick="saveAndCloseSettings()">Save</button>
+    <button class="settings-test" onclick="testFsqKey()">Test key</button>
+  </div>
+  <div id="fsq-test-result" class="fsq-test"></div>
+  <div class="settings-note">Adds Foursquare ratings, live hours &amp; Instagram to pub cards. Free key at foursquare.com/developer — stored locally only.</div>
 </div>`
           : "";
         return `<div class="header">

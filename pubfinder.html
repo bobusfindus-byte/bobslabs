@@ -713,26 +713,25 @@
 
       // Best-effort opening hours check
       // ── Foursquare ─────────────────────────────────────────────────────────────
-      const FSQ_LS = "pubfinder_fsq_key";
-      function getFsqKey() {
-        return localStorage.getItem(FSQ_LS) || "";
+      const PROXY_LS = "pubfinder_proxy_url";
+      function getProxyUrl() {
+        return localStorage.getItem(PROXY_LS) || "";
       }
-      function saveFsqKey(k) {
-        k
-          ? localStorage.setItem(FSQ_LS, k.trim())
-          : localStorage.removeItem(FSQ_LS);
+      function saveProxyUrl(u) {
+        u
+          ? localStorage.setItem(PROXY_LS, u.trim().replace(/\/$/, ""))
+          : localStorage.removeItem(PROXY_LS);
       }
 
       async function fetchFsqPubs(lat, lon, radius) {
-        const key = getFsqKey();
-        if (!key) return [];
+        const proxy = getProxyUrl();
+        if (!proxy) return [];
         try {
           const res = await fetch(
-            `https://places-api.foursquare.com/places/search?ll=${lat},${lon}&radius=${radius}&fsq_category_ids=13003,13029,13065&limit=50`,
+            `${proxy}?ll=${lat},${lon}&radius=${radius}&fsq_category_ids=13003,13029,13065&limit=50`,
             {
               headers: {
-                Authorization: `Bearer ${key}`,
-                "X-Places-Api-Version": "2025-06-17",
+                "Content-Type": "application/json",
               },
             },
           );
@@ -851,10 +850,9 @@ out center body;`;
           .filter((p) => p.lat != null && p.lon != null)
           .sort((a, b) => b.score - a.score);
 
-        const key = getFsqKey();
-        if (key) {
+        if (getProxyUrl()) {
           try {
-            const fsqResults = await fetchFsqPubs(lat, lon, radius, key);
+            const fsqResults = await fetchFsqPubs(lat, lon, radius);
             mergeFsq(pubs, fsqResults);
           } catch (_) {}
         }
@@ -1051,22 +1049,22 @@ out center body;`;
         render();
         if (settingsOpen) {
           requestAnimationFrame(() => {
-            document.getElementById("fsq-key-input")?.focus();
+            document.getElementById("proxy-url-input")?.focus();
           });
         }
       }
       function saveAndCloseSettings() {
-        const val = document.getElementById("fsq-key-input")?.value ?? "";
-        saveFsqKey(val);
+        const val = document.getElementById("proxy-url-input")?.value ?? "";
+        saveProxyUrl(val);
         settingsOpen = false;
         render();
       }
 
-      async function testFsqKey() {
-        const key = document.getElementById("fsq-key-input")?.value.trim();
+      async function testProxy() {
+        const url = document.getElementById("proxy-url-input")?.value.trim();
         const el = document.getElementById("fsq-test-result");
-        if (!key) {
-          el.textContent = "⚠️ No key entered";
+        if (!url) {
+          el.textContent = "⚠️ No URL entered";
           el.className = "fsq-test warn";
           return;
         }
@@ -1076,30 +1074,26 @@ out center body;`;
         const lon = S.lon ?? -0.1278;
         try {
           const res = await fetch(
-            `https://places-api.foursquare.com/places/search?ll=${lat},${lon}&radius=500&fsq_category_ids=13003,13029,13065&limit=5`,
-            {
-              headers: {
-                Authorization: `Bearer ${key}`,
-                "X-Places-Api-Version": "2025-06-17",
-              },
-            },
+            `${url.replace(/\/$/, "")}?ll=${lat},${lon}&radius=500&fsq_category_ids=13003,13029,13065&limit=3`,
           );
           if (!res.ok) {
             const body = await res.text().catch(() => "");
-            el.textContent = `✗ ${res.status}: ${body.slice(0, 400)}`;
+            el.textContent = `✗ ${res.status}: ${body.slice(0, 300)}`;
             el.className = "fsq-test fail";
             return;
           }
           const data = await res.json();
           const results = data.results || data.places || [];
-          // Show first result's keys so we can verify field names
-          const sample = results[0]
-            ? Object.keys(results[0]).join(", ")
-            : "no results";
-          el.textContent = `✓ Key works — ${results.length} venues. Fields: ${sample}`;
+          const withHours = results.filter(
+            (r) => r.hours?.open_now != null,
+          ).length;
+          const withIg = results.filter(
+            (r) => r.social_media?.instagram,
+          ).length;
+          el.textContent = `✓ Proxy works — ${results.length} venues, ${withHours} with hours, ${withIg} with Instagram`;
           el.className = "fsq-test ok";
         } catch (e) {
-          el.textContent = `✗ Network error: ${e.message}`;
+          el.textContent = `✗ ${e.message}`;
           el.className = "fsq-test fail";
         }
       }
@@ -1109,15 +1103,15 @@ out center body;`;
         const panel = settingsOpen
           ? `<div class="settings-panel">
   <div class="settings-row">
-    <label class="settings-label" for="fsq-key-input">Foursquare API key</label>
-    <input class="settings-input" id="fsq-key-input" type="password" placeholder="Paste key here…" value="${getFsqKey()}">
+    <label class="settings-label" for="proxy-url-input">Proxy URL</label>
+    <input class="settings-input" id="proxy-url-input" type="url" placeholder="https://your-worker.workers.dev" value="${getProxyUrl()}">
   </div>
   <div class="settings-row">
     <button class="settings-save" onclick="saveAndCloseSettings()">Save</button>
-    <button class="settings-test" onclick="testFsqKey()">Test key</button>
+    <button class="settings-test" onclick="testProxy()">Test</button>
   </div>
   <div id="fsq-test-result" class="fsq-test"></div>
-  <div class="settings-note">Adds Foursquare ratings, live hours &amp; Instagram to pub cards. Free key at foursquare.com/developer — stored locally only.</div>
+  <div class="settings-note">Paste your Cloudflare Worker URL — adds live hours, ratings &amp; Instagram. See workers/pubfinder-proxy.js in the repo to set up.</div>
 </div>`
           : "";
         return `<div class="header">

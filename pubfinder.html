@@ -773,6 +773,7 @@
         if (!proxy) return;
         const matched = pubs.filter((p) => p.fsqId).slice(0, 5);
         for (const pub of matched) {
+          await new Promise((r) => setTimeout(r, 600));
           try {
             const res = await fetch(
               `${proxy}/places/${pub.fsqId}?fields=hours,rating`,
@@ -783,7 +784,6 @@
             if (openNow != null) pub.open = openNow;
             if (d.rating != null) pub.fsqRating = d.rating;
           } catch (_) {}
-          await new Promise((r) => setTimeout(r, 250));
         }
       }
 
@@ -1106,6 +1106,7 @@ out center body;`;
           let hoursNote = "";
           const firstId = results[0]?.fsq_place_id;
           if (firstId) {
+            await new Promise((r) => setTimeout(r, 600));
             try {
               const dr = await fetch(
                 `${url.replace(/\/$/, "")}/places/${firstId}?fields=hours,rating`,

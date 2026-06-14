@@ -728,7 +728,7 @@
         if (!proxy) return [];
         try {
           const res = await fetch(
-            `${proxy}?ll=${lat},${lon}&radius=${radius}&fsq_category_ids=13003,13029,13065&limit=50`,
+            `${proxy}?ll=${lat},${lon}&radius=${radius}&limit=50`,
             {
               headers: {
                 "Content-Type": "application/json",
@@ -1074,7 +1074,7 @@ out center body;`;
         const lon = S.lon ?? -0.1278;
         try {
           const res = await fetch(
-            `${url.replace(/\/$/, "")}?ll=${lat},${lon}&radius=500&fsq_category_ids=13003,13029,13065&limit=3`,
+            `${url.replace(/\/$/, "")}?ll=${lat},${lon}&radius=500&limit=5`,
           );
           if (!res.ok) {
             const body = await res.text().catch(() => "");

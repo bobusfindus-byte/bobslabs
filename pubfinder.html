@@ -729,7 +729,7 @@
         try {
           const res = await fetch(
             `https://api.foursquare.com/v3/places/search?ll=${lat},${lon}&radius=${radius}&categories=13003,13029,13065&limit=50&fields=fsq_id,name,geocodes,rating,hours,social_media`,
-            { headers: { Authorization: key } },
+            { headers: { Authorization: `Bearer ${key}` } },
           );
           if (!res.ok) return [];
           return (await res.json()).results || [];
@@ -1071,7 +1071,7 @@ out center body;`;
         try {
           const res = await fetch(
             `https://api.foursquare.com/v3/places/search?ll=${lat},${lon}&radius=500&categories=13003,13029,13065&limit=5&fields=fsq_id,name,hours,social_media`,
-            { headers: { Authorization: key } },
+            { headers: { Authorization: `Bearer ${key}` } },
           );
           if (res.status === 401) {
             el.textContent = "✗ Invalid key (401)";

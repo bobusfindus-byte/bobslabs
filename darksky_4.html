@@ -1,0 +1,1128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="DarkSky" />
+    <title>Skyline Weather</title>
+    <script>
+      // Generate app icon as canvas PNG so it works as apple-touch-icon
+      (function () {
+        const c = document.createElement('canvas');
+        c.width = c.height = 180;
+        const x = c.getContext('2d');
+        // Rounded background
+        x.fillStyle = '#0a0f1a';
+        x.beginPath();
+        x.moveTo(40, 0);
+        x.lineTo(140, 0);
+        x.arcTo(180, 0, 180, 40, 40);
+        x.lineTo(180, 140);
+        x.arcTo(180, 180, 140, 180, 40);
+        x.lineTo(40, 180);
+        x.arcTo(0, 180, 0, 140, 40);
+        x.lineTo(0, 40);
+        x.arcTo(0, 0, 40, 0, 40);
+        x.closePath();
+        x.fill();
+        // Moon body
+        x.fillStyle = '#c8d8f0';
+        x.beginPath();
+        x.arc(88, 92, 50, 0, Math.PI * 2);
+        x.fill();
+        // Crescent cutout
+        x.fillStyle = '#0a0f1a';
+        x.beginPath();
+        x.arc(112, 74, 44, 0, Math.PI * 2);
+        x.fill();
+        // Stars
+        [
+          [38, 36, 3.5, '#4a9eff', 1],
+          [55, 20, 2, '#fff', 0.8],
+          [150, 130, 2.5, '#4a9eff', 1],
+          [155, 44, 2, '#fff', 0.6],
+          [26, 122, 2, '#fff', 0.7],
+          [164, 90, 1.8, '#4a9eff', 0.9],
+          [140, 22, 1.5, '#fff', 0.5],
+        ].forEach(([sx, sy, r, col, a]) => {
+          x.globalAlpha = a;
+          x.fillStyle = col;
+          x.beginPath();
+          x.arc(sx, sy, r, 0, Math.PI * 2);
+          x.fill();
+        });
+        x.globalAlpha = 1;
+        const lnk = document.createElement('link');
+        lnk.rel = 'apple-touch-icon';
+        lnk.href = c.toDataURL('image/png');
+        document.head.appendChild(lnk);
+      })();
+    </script>
+    <style>
+      :root {
+        --bg: #0a0f1a;
+        --surface: #111827;
+        --surface2: #1a2436;
+        --border: rgba(255, 255, 255, 0.08);
+        --text: #e8edf5;
+        --text-dim: #8094b4;
+        --text-mid: #9aa5bb;
+        --accent: #4a9eff;
+        --font-ui: -apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+        --font-data: 'SF Mono', 'Courier New', monospace;
+        --safe-top: env(safe-area-inset-top, 0px);
+        --safe-bottom: env(safe-area-inset-bottom, 0px);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-ui);
+        min-height: 100dvh;
+      }
+
+      .header {
+        padding: calc(var(--safe-top) + 14px) 16px 12px;
+        background: var(--bg);
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        border-bottom: 1px solid var(--border);
+      }
+      .top-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .app-title {
+        font-size: 18px;
+        font-weight: 700;
+        flex: 1;
+        letter-spacing: -0.3px;
+      }
+      .unit-toggle {
+        display: flex;
+        background: var(--surface2);
+        border-radius: 8px;
+        padding: 2px;
+        gap: 2px;
+      }
+      .unit-btn {
+        background: none;
+        border: none;
+        color: var(--text-dim);
+        font-family: var(--font-ui);
+        font-size: 13px;
+        font-weight: 600;
+        padding: 5px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .unit-btn.active {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .search-row {
+        display: flex;
+        gap: 8px;
+      }
+      .search-input {
+        flex: 1;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text);
+        font-family: var(--font-ui);
+        font-size: 15px;
+        padding: 10px 14px;
+        outline: none;
+      }
+      .search-input::placeholder {
+        color: var(--text-dim);
+      }
+      .search-input:focus {
+        border-color: var(--accent);
+      }
+      .search-btn {
+        background: var(--accent);
+        border: none;
+        border-radius: 10px;
+        color: #fff;
+        font-family: var(--font-ui);
+        font-size: 15px;
+        font-weight: 600;
+        padding: 10px 16px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .search-btn:active {
+        opacity: 0.8;
+      }
+      .locate-btn {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--accent);
+        font-family: var(--font-ui);
+        font-size: 15px;
+        padding: 10px 14px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .locate-btn:active {
+        opacity: 0.7;
+      }
+      .updated-time {
+        font-size: 11px;
+        color: var(--text-dim);
+        white-space: nowrap;
+      }
+      .refreshing-bar {
+        height: 2px;
+        background: linear-gradient(90deg, var(--accent) 0%, transparent 100%);
+        animation: sweep 1.2s ease-in-out infinite;
+      }
+      @keyframes sweep {
+        0% {
+          opacity: 0.3;
+        }
+        50% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0.3;
+        }
+      }
+
+      /* ── Disco Mode ── */
+      .disco-toggle {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text-mid);
+        font-family: var(--font-ui);
+        font-size: 13px;
+        font-weight: 600;
+        padding: 5px 10px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition:
+          border-color 0.2s,
+          color 0.2s;
+      }
+      .disco-toggle.on {
+        border-color: #c77dff;
+        color: #c77dff;
+      }
+
+      /* Disco ball sits centred over the bar at the Now row, spinning continuously */
+      .disco-wrap {
+        position: absolute;
+        left: 21px;
+        width: 40px;
+        height: 40px;
+        margin-left: -20px;
+        pointer-events: none;
+        z-index: 20;
+        transform-origin: center center;
+        animation: disco-spin 2s linear infinite;
+        font-size: 32px;
+        line-height: 40px;
+        text-align: center;
+      }
+      @keyframes disco-spin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Sparkle canvas overlay */
+      #sparkle-canvas {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 100;
+      }
+
+      /* Speaker in bottom-right corner */
+      .disco-speaker {
+        position: fixed;
+        bottom: calc(var(--safe-bottom) + 20px);
+        right: 18px;
+        font-size: 36px;
+        z-index: 101;
+        pointer-events: none;
+        animation: speaker-pump 0.5s ease-in-out infinite alternate;
+        filter: drop-shadow(0 0 8px rgba(199, 125, 255, 0.8));
+      }
+      @keyframes speaker-pump {
+        from {
+          transform: scale(1);
+          opacity: 0.85;
+        }
+        to {
+          transform: scale(1.18);
+          opacity: 1;
+        }
+      }
+
+      .state-screen {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 60vh;
+        gap: 14px;
+        color: var(--text-dim);
+        font-size: 15px;
+        text-align: center;
+        padding: 0 32px;
+      }
+      .state-screen .big {
+        font-size: 44px;
+      }
+      .state-screen .title {
+        color: var(--text);
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .spinner {
+        width: 36px;
+        height: 36px;
+        border: 3px solid var(--surface2);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Hero */
+      .hero {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        padding: 20px 16px 12px;
+      }
+      .hero-temp {
+        font-size: 76px;
+        font-weight: 300;
+        letter-spacing: -4px;
+        line-height: 1;
+      }
+      .hero-right {
+        text-align: right;
+        padding-top: 4px;
+      }
+      .hero-cond {
+        font-size: 17px;
+        font-weight: 500;
+        margin-bottom: 3px;
+      }
+      .hero-feels {
+        font-size: 13px;
+        color: var(--text-dim);
+        margin-bottom: 10px;
+      }
+      .pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        justify-content: flex-end;
+      }
+      .pill {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 4px 10px;
+        font-size: 12px;
+        color: var(--text-mid);
+      }
+
+      .summary {
+        margin: 0 16px 18px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 14px;
+        font-size: 14px;
+        color: var(--text-mid);
+        line-height: 1.5;
+      }
+
+      /* Timeline */
+      .section-label {
+        padding: 0 16px 8px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--text-dim);
+      }
+
+      .timeline-wrap {
+        position: relative;
+        padding: 0 16px 0 18px;
+      }
+
+      /* THE bar — clean, flat, no glow */
+      .cond-bar {
+        position: absolute;
+        left: 16px;
+        top: 0;
+        bottom: 0;
+        width: 12px;
+        border-radius: 6px;
+        pointer-events: none;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .hour-row {
+        display: grid;
+        grid-template-columns: 50px 1fr 40px 46px;
+        align-items: center;
+        gap: 0 8px;
+        padding: 9px 0 9px 20px;
+        border-bottom: 1px solid var(--border);
+      }
+      .hour-row:last-child {
+        border-bottom: none;
+      }
+      .hour-row.now {
+        background: rgba(74, 158, 255, 0.07);
+        border-radius: 8px;
+        margin: 0 -4px;
+        padding-left: 24px;
+        padding-right: 4px;
+      }
+
+      .h-time {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-dim);
+      }
+      .hour-row.now .h-time {
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .h-cond {
+        font-size: 13px;
+        color: var(--text-mid);
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .h-precip {
+        font-size: 12px;
+        color: #5aabff;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+      .h-precip.dry {
+        color: var(--text-dim);
+      }
+      .h-temp {
+        font-size: 17px;
+        font-weight: 600;
+        text-align: right;
+      }
+
+      /* Week strip */
+      .week {
+        padding: 0 0 calc(var(--safe-bottom) + 24px);
+        margin-top: 24px;
+      }
+      .day-scroll {
+        display: flex;
+        gap: 8px;
+        padding: 0 16px;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+      }
+      .day-scroll::-webkit-scrollbar {
+        display: none;
+      }
+      .day-card {
+        flex: 0 0 72px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 11px 6px;
+        text-align: center;
+        cursor: pointer;
+      }
+      .day-card.sel {
+        border-color: var(--accent);
+      }
+      .day-card:active {
+        opacity: 0.75;
+      }
+      .d-name {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 7px;
+      }
+      .day-card.sel .d-name {
+        color: var(--accent);
+      }
+      .d-icon {
+        font-size: 24px;
+        margin-bottom: 7px;
+      }
+      .d-temps {
+        font-size: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        align-items: center;
+      }
+      .d-hi {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .d-lo {
+        color: var(--text-dim);
+        font-size: 11px;
+      }
+
+      /* Waking hours: dim rows outside 8am–10pm */
+      .hour-row.dim {
+        opacity: 0.5;
+      }
+
+      /* Hyperlocal Dark Sky–style precipitation alert */
+      .hyperlocal {
+        margin: 0 16px 14px;
+        background: rgba(74, 158, 255, 0.1);
+        border: 1px solid rgba(74, 158, 255, 0.28);
+        border-radius: 12px;
+        padding: 10px 14px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--accent);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // ── State ──────────────────────────────────────────────────────────────────
+      const S = {
+        phase: 'idle',
+        unit: 'C',
+        locName: '',
+        weather: null,
+        day: 0,
+        errMsg: '',
+        lastUpdated: null,
+        lastLat: null,
+        lastLon: null,
+        refreshTimer: null,
+        discoMode: false,
+      };
+
+      // ── WMO codes ──────────────────────────────────────────────────────────────
+      const WMO = {
+        0: { l: 'Clear', e: '☀️' },
+        1: { l: 'Mostly Clear', e: '🌤' },
+        2: { l: 'Partly Cloudy', e: '⛅️' },
+        3: { l: 'Overcast', e: '☁️' },
+        45: { l: 'Fog', e: '🌫' },
+        48: { l: 'Icy Fog', e: '🌫' },
+        51: { l: 'Light Drizzle', e: '🌦' },
+        53: { l: 'Drizzle', e: '🌦' },
+        55: { l: 'Heavy Drizzle', e: '🌧' },
+        61: { l: 'Light Rain', e: '🌧' },
+        63: { l: 'Rain', e: '🌧' },
+        65: { l: 'Heavy Rain', e: '🌧' },
+        71: { l: 'Light Snow', e: '🌨' },
+        73: { l: 'Snow', e: '❄️' },
+        75: { l: 'Heavy Snow', e: '❄️' },
+        77: { l: 'Snow Grains', e: '🌨' },
+        80: { l: 'Showers', e: '🌦' },
+        81: { l: 'Showers', e: '🌧' },
+        82: { l: 'Heavy Showers', e: '⛈' },
+        85: { l: 'Snow Showers', e: '🌨' },
+        86: { l: 'Heavy Snow Showers', e: '❄️' },
+        95: { l: 'Thunderstorm', e: '⛈' },
+        96: { l: 'Hail Storm', e: '⛈' },
+        99: { l: 'Hail Storm', e: '⛈' },
+      };
+      function wmo(code) {
+        return WMO[code] || { l: 'Unknown', e: '🌡' };
+      }
+
+      // ── Temp conversion ────────────────────────────────────────────────────────
+      function T(c) {
+        return S.unit === 'C' ? Math.round(c) + '°' : Math.round((c * 9) / 5 + 32) + '°';
+      }
+
+      // ── Colour bar — solid colours, intensity via hue depth ─────────────────────
+      function barColor(prob, code, isDay) {
+        const p = (prob || 0) / 100;
+        // Clear sky at night: deep navy
+        if (p < 0.05 && code <= 2 && !isDay) return `rgb(22,38,88)`;
+        // Clear sky daytime: warm amber
+        if (p < 0.05 && code <= 2) return `rgb(212,164,76)`;
+        // Thunderstorm: purple, deeper with probability
+        if (code >= 95) {
+          const t = p;
+          return `rgb(${Math.round(150 - 40 * t)},${Math.round(90 - 40 * t)},${Math.round(220)})`;
+        }
+        // Snow: pale icy blue
+        if ((code >= 71 && code <= 77) || code === 85 || code === 86) return `rgb(168,210,235)`;
+        // Overcast / fog with little rain chance: muted slate
+        if (code >= 3 && code <= 48 && p < 0.15) return `rgb(94,108,128)`;
+        // Rain: light teal-blue → deep saturated blue as probability rises
+        const r = Math.round(90 - 70 * p);
+        const g = Math.round(160 - 60 * p);
+        const b = Math.round(200 + 40 * p);
+        return `rgb(${r},${g},${b})`;
+      }
+
+      // ── Summary sentence ───────────────────────────────────────────────────────
+      function makeSummary(hours) {
+        const now = new Date();
+        const ahead = hours.filter((h) => new Date(h.t) >= now).slice(0, 12);
+        if (!ahead.length) return 'No forecast available.';
+        const rainY = ahead.filter((h) => h.pp > 40);
+        if (!rainY.length) return 'No precipitation expected in the next 12 hours.';
+        if (rainY.length >= 8)
+          return 'Rain likely throughout much of the day. Umbrella recommended.';
+        const hr = new Date(rainY[0].t).getHours();
+        const when =
+          hr < 12
+            ? 'this morning'
+            : hr < 17
+              ? 'this afternoon'
+              : hr < 20
+                ? 'this evening'
+                : 'tonight';
+        const heavy = Math.max(...ahead.map((h) => h.pp)) > 70 ? ' — could be heavy' : '';
+        return `${wmo(rainY[0].c).l} expected ${when}${heavy}.`;
+      }
+
+      // ── Hyperlocal: Dark Sky–style "Rain in X min" from minutely_15 ───────────
+      function makeHyperlocal(m15) {
+        if (!m15 || !m15.length) return null;
+        const now = new Date();
+        // Work only with the next 2 hours (8 × 15-min slots)
+        const upcoming = m15.filter((m) => new Date(m.t) > now).slice(0, 8);
+        if (!upcoming.length) return null;
+        const wet = (m) => m.precip >= 0.1;
+        const currentlyWet = wet(upcoming[0]);
+        if (currentlyWet) {
+          const clearsAt = upcoming.findIndex((m) => !wet(m));
+          if (clearsAt === -1) return '🌧 Precipitation continuing for the next 2 hours.';
+          const mins = clearsAt * 15;
+          return mins <= 15
+            ? '🌧 Precipitation clearing very soon.'
+            : `🌧 Precipitation clearing in about ${mins} min.`;
+        } else {
+          const startsAt = upcoming.findIndex(wet);
+          if (startsAt === -1) return null;
+          const mins = startsAt * 15;
+          const label = wmo(upcoming[startsAt].c).l;
+          if (mins === 0) return `🌧 ${label} starting now.`;
+          return mins <= 15
+            ? `🌧 ${label} starting very soon.`
+            : `🌧 ${label} starting in about ${mins} min.`;
+        }
+      }
+
+      // ── Fetch weather from Open-Meteo ──────────────────────────────────────────
+      async function loadWeather(lat, lon) {
+        const url =
+          'https://api.open-meteo.com/v1/forecast' +
+          '?latitude=' +
+          lat +
+          '&longitude=' +
+          lon +
+          '&hourly=temperature_2m,apparent_temperature,precipitation_probability,weathercode,windspeed_10m,relativehumidity_2m,is_day' +
+          '&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max' +
+          '&minutely_15=precipitation,weathercode' +
+          '&wind_speed_unit=mph&timezone=auto&forecast_days=7';
+
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('Weather fetch failed: ' + r.status);
+        const d = await r.json();
+
+        const hours = d.hourly.time.map((t, i) => ({
+          t,
+          temp: d.hourly.temperature_2m[i],
+          feels: d.hourly.apparent_temperature[i],
+          pp: d.hourly.precipitation_probability[i] ?? 0,
+          c: d.hourly.weathercode[i],
+          wind: d.hourly.windspeed_10m[i],
+          hum: d.hourly.relativehumidity_2m[i],
+          isDay: d.hourly.is_day[i] === 1,
+        }));
+        const m15 =
+          d.minutely_15 && d.minutely_15.time
+            ? d.minutely_15.time.map((t, i) => ({
+                t,
+                precip: d.minutely_15.precipitation[i] ?? 0,
+                c: d.minutely_15.weathercode[i],
+              }))
+            : [];
+        const days = d.daily.time.map((t, i) => ({
+          t,
+          c: d.daily.weathercode[i],
+          hi: d.daily.temperature_2m_max[i],
+          lo: d.daily.temperature_2m_min[i],
+          ppMax: d.daily.precipitation_probability_max[i] ?? 0,
+        }));
+        return { hours, days, m15 };
+      }
+
+      // ── Geocode via Open-Meteo ─────────────────────────────────────────────────
+      async function geocode(q) {
+        const url =
+          'https://geocoding-api.open-meteo.com/v1/search?name=' +
+          encodeURIComponent(q) +
+          '&count=1&language=en&format=json';
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('Geocode HTTP ' + r.status);
+        const d = await r.json();
+        if (!d.results || !d.results.length) throw new Error('Not found');
+        const x = d.results[0];
+        return {
+          name: x.name + (x.admin1 ? ', ' + x.admin1 : ''),
+          lat: x.latitude,
+          lon: x.longitude,
+        };
+      }
+
+      // ── Reverse geocode via Nominatim ─────────────────────────────────────────
+      async function reverseGeocode(lat, lon) {
+        try {
+          const r = await fetch(
+            'https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lon,
+          );
+          const d = await r.json();
+          const a = d.address || {};
+          return a.city || a.town || a.village || a.county || 'Your Location';
+        } catch (e) {
+          return 'Your Location';
+        }
+      }
+
+      // ── Actions ────────────────────────────────────────────────────────────────
+      async function search(q) {
+        if (!q.trim()) return;
+        S.phase = 'loading';
+        render();
+        try {
+          const loc = await geocode(q);
+          S.locName = loc.name;
+          S.weather = await loadWeather(loc.lat, loc.lon);
+          S.day = 0;
+          S.phase = 'ready';
+          S.lastUpdated = new Date();
+          S.lastLat = loc.lat;
+          S.lastLon = loc.lon;
+          saveLocation(loc.name, loc.lat, loc.lon);
+          scheduleRefresh();
+        } catch (e) {
+          console.error(e);
+          S.errMsg = 'Could not find "' + q + '". Check spelling or try a nearby city.';
+          S.phase = 'error';
+        }
+        render();
+      }
+
+      async function locate() {
+        if (!navigator.geolocation) {
+          S.errMsg = 'Geolocation not available in this browser.';
+          S.phase = 'error';
+          render();
+          return;
+        }
+        S.phase = 'loading';
+        render();
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            try {
+              const { latitude: lat, longitude: lon } = pos.coords;
+              S.locName = await reverseGeocode(lat, lon);
+              S.weather = await loadWeather(lat, lon);
+              S.day = 0;
+              S.phase = 'ready';
+              S.lastUpdated = new Date();
+              S.lastLat = lat;
+              S.lastLon = lon;
+              saveLocation(S.locName, lat, lon);
+              scheduleRefresh();
+            } catch (e) {
+              console.error(e);
+              S.errMsg = 'Failed to load weather for your location.';
+              S.phase = 'error';
+            }
+            render();
+          },
+          (err) => {
+            S.errMsg = 'Location access denied. Please search for a city instead.';
+            S.phase = 'error';
+            render();
+          },
+          { timeout: 12000 },
+        );
+      }
+
+      // ── Render ─────────────────────────────────────────────────────────────────
+      function render() {
+        document.getElementById('root').innerHTML = html();
+        requestAnimationFrame(positionDisco);
+      }
+
+      function html() {
+        const disco = S.discoMode
+          ? '<canvas id="sparkle-canvas"></canvas><div class="disco-speaker">🔊</div>'
+          : '';
+        return header() + body() + disco;
+      }
+
+      function header() {
+        return `<div class="header">
+  <div class="top-row">
+    <span class="app-title">🌤 ${S.locName || 'Skyline'}</span>
+    ${S.lastUpdated ? `<span class="updated-time">Updated ${fmtTime(S.lastUpdated)}</span>` : ''}
+    <div class="unit-toggle">
+      <button class="unit-btn ${S.unit === 'C' ? 'active' : ''}" onclick="S.unit='C';render()">°C</button>
+      <button class="unit-btn ${S.unit === 'F' ? 'active' : ''}" onclick="S.unit='F';render()">°F</button>
+    </div>
+    ${S.phase === 'ready' ? '<button class="disco-toggle ' + (S.discoMode ? 'on' : 'off') + '" onclick="S.discoMode=!S.discoMode;render()">' + (S.discoMode ? '🪩 ON' : '🪩 Disco') + '</button>' : ''}
+  </div>
+  <div class="search-row">
+    <input class="search-input" id="si" type="search" placeholder="Search city…" autocomplete="off" autocorrect="off" spellcheck="false">
+    <button class="search-btn" onclick="doSearch()">Search</button>
+    <button class="locate-btn" onclick="locate()">⌖</button>
+  </div>
+</div>`;
+      }
+
+      function body() {
+        if (S.phase === 'idle')
+          return `<div class="state-screen"><div class="big">🌤</div><div class="title">Skyline Weather</div><div>Search for a city above, or tap ⌖ to use your location.</div></div>`;
+        if (S.phase === 'loading' && !S.weather)
+          return `<div class="state-screen"><div class="spinner"></div><div>Loading…</div></div>`;
+        if (S.phase === 'loading' && S.weather)
+          return `<div class="refreshing-bar"></div>` + weatherHTML();
+        if (S.phase === 'error')
+          return `<div class="state-screen"><div class="big">⚠️</div><div>${S.errMsg}</div></div>`;
+        return weatherHTML();
+      }
+
+      function weatherHTML() {
+        const { hours, days, m15 } = S.weather;
+        const selDate = days[S.day].t; // "YYYY-MM-DD"
+        const dayHours = hours.filter((h) => h.t.startsWith(selDate));
+
+        const now = new Date();
+        const nowH = selDate + 'T' + String(now.getHours()).padStart(2, '0') + ':00';
+        const isToday = S.day === 0;
+
+        const cur = isToday
+          ? dayHours.find((h) => h.t === nowH) || dayHours[0]
+          : dayHours[Math.min(11, dayHours.length - 1)];
+        const info = wmo(cur.c);
+
+        // Gradient stops for the bar
+        const stops = dayHours.map((h, i) => {
+          const pct = Math.round((i / dayHours.length) * 100);
+          return barColor(h.pp, h.c, h.isDay) + ' ' + pct + '%';
+        });
+        if (dayHours.length)
+          stops.push(
+            barColor(
+              dayHours[dayHours.length - 1].pp,
+              dayHours[dayHours.length - 1].c,
+              dayHours[dayHours.length - 1].isDay,
+            ) + ' 100%',
+          );
+        const gradient = 'linear-gradient(to bottom,' + stops.join(',') + ')';
+
+        const sumText = isToday
+          ? makeSummary(hours)
+          : info.l + ' expected. High ' + T(days[S.day].hi) + ', low ' + T(days[S.day].lo) + '.';
+        const hyperlocalMsg = isToday ? makeHyperlocal(m15) : null;
+
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+        return `
+<div class="hero">
+  <div class="hero-temp">${T(cur.temp)}</div>
+  <div class="hero-right">
+    <div class="hero-cond">${info.e} ${info.l}</div>
+    <div class="hero-feels">Feels like ${T(cur.feels)}</div>
+    <div class="pills">
+      <span class="pill">💧 ${cur.hum}%</span>
+      <span class="pill">💨 ${Math.round(cur.wind)} mph</span>
+      <span class="pill">🌂 ${cur.pp}%</span>
+    </div>
+  </div>
+</div>
+
+${hyperlocalMsg ? `<div class="hyperlocal">${hyperlocalMsg}</div>` : ''}
+<div class="summary">${sumText}</div>
+
+<div class="section-label">Hourly</div>
+<div class="timeline-wrap">
+  <div class="cond-bar" style="background:${gradient}"></div>
+  ${S.discoMode && isToday ? `<div class="disco-wrap" id="discowrap">🪩</div>` : ''}
+  ${dayHours
+    .map((h) => {
+      const hh = new Date(h.t).getHours();
+      const isNow = isToday && h.t === nowH;
+      const isSleeping = hh < 8 || hh >= 22;
+      const tl = hh === 0 ? '12am' : hh < 12 ? hh + 'am' : hh === 12 ? '12pm' : hh - 12 + 'pm';
+      const w = wmo(h.c);
+      return `<div class="hour-row${isNow ? ' now' : ''}${isSleeping && !isNow ? ' dim' : ''}">
+      <span class="h-time">${isNow ? '▶ Now' : tl}</span>
+      <span class="h-cond">${w.e} ${w.l}</span>
+      <span class="h-precip${h.pp < 5 ? ' dry' : ''}">${h.pp > 4 ? h.pp + '%' : '—'}</span>
+      <span class="h-temp">${T(h.temp)}</span>
+    </div>`;
+    })
+    .join('')}
+</div>
+
+<div class="week">
+  <div class="section-label">7 Days</div>
+  <div class="day-scroll">
+    ${days
+      .map((d, i) => {
+        const dd = new Date(d.t + 'T12:00:00');
+        const lbl = i === 0 ? 'Today' : i === 1 ? 'Tmrw' : dayNames[dd.getDay()];
+        const di = wmo(d.c);
+        return `<div class="day-card${i === S.day ? ' sel' : ''}" onclick="S.day=${i};render();scrollTo({top:0,behavior:'smooth'})">
+        <div class="d-name">${lbl}</div>
+        <div class="d-icon">${di.e}</div>
+        <div class="d-temps"><span class="d-hi">${T(d.hi)}</span> <span class="d-lo">${T(d.lo)}</span></div>
+      </div>`;
+      })
+      .join('')}
+  </div>
+</div>`;
+      }
+
+      // ── Helpers ───────────────────────────────────────────────────────────────
+      function fmtTime(d) {
+        const h = d.getHours(),
+          m = String(d.getMinutes()).padStart(2, '0');
+        return (h % 12 || 12) + ':' + m + (h < 12 ? 'am' : 'pm');
+      }
+
+      function saveLocation(name, lat, lon) {
+        try {
+          localStorage.setItem('skyline_loc', JSON.stringify({ name, lat, lon }));
+        } catch (e) {}
+      }
+
+      function loadSavedLocation() {
+        try {
+          const s = localStorage.getItem('skyline_loc');
+          return s ? JSON.parse(s) : null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // ── Background refresh ─────────────────────────────────────────────────────
+      const REFRESH_MS = 30 * 60 * 1000; // 30 minutes
+
+      function scheduleRefresh() {
+        if (S.refreshTimer) clearTimeout(S.refreshTimer);
+        S.refreshTimer = setTimeout(silentRefresh, REFRESH_MS);
+      }
+
+      async function silentRefresh() {
+        if (S.lastLat === null || S.phase === 'loading') return;
+        console.log('Silent refresh at', new Date().toLocaleTimeString());
+        S.phase = 'loading';
+        render();
+        try {
+          S.weather = await loadWeather(S.lastLat, S.lastLon);
+          S.lastUpdated = new Date();
+          S.phase = 'ready';
+        } catch (e) {
+          console.error('Refresh failed:', e);
+          S.phase = 'ready'; // keep showing old data
+        }
+        render();
+        scheduleRefresh(); // queue the next one
+      }
+
+      // Refresh when app comes back into view (user switches back from another app)
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && S.lastLat !== null) {
+          const age = S.lastUpdated ? Date.now() - S.lastUpdated.getTime() : Infinity;
+          if (age > 10 * 60 * 1000) {
+            // stale if >10 mins
+            silentRefresh();
+          }
+        }
+      });
+
+      // ── Disco Mode ────────────────────────────────────────────────────────────
+      let sparkleRAF = null;
+      const sparkles = [];
+      const DISCO_COLORS = [
+        '#ff6b6b',
+        '#ffd93d',
+        '#6bcb77',
+        '#4d96ff',
+        '#c77dff',
+        '#ff9ff3',
+        '#54a0ff',
+        '#ff9f43',
+        '#00d2d3',
+      ];
+
+      function startSparkles() {
+        if (sparkleRAF) {
+          cancelAnimationFrame(sparkleRAF);
+          sparkleRAF = null;
+        }
+        sparkles.length = 0;
+        if (!S.discoMode) return;
+        const canvas = document.getElementById('sparkle-canvas');
+        if (!canvas) return;
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        const ctx = canvas.getContext('2d');
+        let lastSpawn = 0;
+
+        function getOrigin() {
+          const ball = document.getElementById('discowrap');
+          if (!ball) return { x: 40, y: window.innerHeight * 0.4 };
+          const r = ball.getBoundingClientRect();
+          return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        }
+
+        function frame(t) {
+          if (!S.discoMode || !document.getElementById('sparkle-canvas')) {
+            sparkleRAF = null;
+            return;
+          }
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          if (t - lastSpawn > 55) {
+            const o = getOrigin();
+            for (let i = 0; i < 5; i++) {
+              const angle = Math.random() * Math.PI * 2;
+              const speed = 2.5 + Math.random() * 4.5;
+              sparkles.push({
+                x: o.x,
+                y: o.y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                color: DISCO_COLORS[Math.floor(Math.random() * DISCO_COLORS.length)],
+                life: 1.0,
+                decay: 0.012 + Math.random() * 0.016,
+                size: 2.5 + Math.random() * 3,
+              });
+            }
+            lastSpawn = t;
+          }
+          for (let i = sparkles.length - 1; i >= 0; i--) {
+            const s = sparkles[i];
+            s.x += s.vx;
+            s.y += s.vy;
+            s.vy += 0.05;
+            s.life -= s.decay;
+            if (s.life <= 0) {
+              sparkles.splice(i, 1);
+              continue;
+            }
+            ctx.globalAlpha = s.life * 0.9;
+            ctx.fillStyle = s.color;
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = s.life;
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, s.size * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+          sparkleRAF = requestAnimationFrame(frame);
+        }
+        sparkleRAF = requestAnimationFrame(frame);
+      }
+
+      function positionDisco() {
+        if (!S.discoMode) return;
+        requestAnimationFrame(() => {
+          const ball = document.getElementById('discowrap');
+          const nowRow = document.querySelector('.hour-row.now');
+          const wrap = document.querySelector('.timeline-wrap');
+          if (!ball || !nowRow || !wrap) return;
+          const wrapRect = wrap.getBoundingClientRect();
+          const rowRect = nowRow.getBoundingClientRect();
+          const centreOfRow = rowRect.top - wrapRect.top + rowRect.height / 2;
+          ball.style.top = centreOfRow - 20 + 'px';
+          startSparkles();
+        });
+      }
+
+      // ── Key handler — runs AFTER render so input exists ────────────────────────
+      function doSearch() {
+        // Read the input value NOW, before any render wipes it
+        const v = (document.getElementById('si') || {}).value || '';
+        search(v);
+      }
+
+      // Wire up Enter key via event delegation (survives re-renders)
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target && e.target.id === 'si') doSearch();
+      });
+
+      // Restore last location on load
+      (async () => {
+        const saved = loadSavedLocation();
+        if (saved) {
+          S.locName = saved.name;
+          S.phase = 'loading';
+          render();
+          try {
+            S.weather = await loadWeather(saved.lat, saved.lon);
+            S.lastLat = saved.lat;
+            S.lastLon = saved.lon;
+            S.lastUpdated = new Date();
+            S.day = 0;
+            S.phase = 'ready';
+            scheduleRefresh();
+          } catch (e) {
+            S.phase = 'idle';
+          }
+          render();
+        } else {
+          render();
+        }
+      })();
+    </script>
+  </body>
+</html>

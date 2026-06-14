@@ -137,7 +137,8 @@
       .filter-bar {
         display: flex;
         align-items: center;
-        gap: 10px;
+        flex-wrap: wrap;
+        gap: 8px;
         padding: 10px 16px 0;
       }
       .filter-toggle {
@@ -468,7 +469,6 @@
         color: var(--amber);
       }
       .filter-tag-active {
-        margin-left: auto;
         font-size: 12px;
         font-weight: 600;
         color: var(--amber);
@@ -477,6 +477,22 @@
         border: 1px solid rgba(245, 158, 11, 0.4);
         border-radius: 8px;
         white-space: nowrap;
+      }
+
+      /* ── Fav button ── */
+      .fav-btn {
+        background: none;
+        border: none;
+        font-size: 16px;
+        cursor: pointer;
+        opacity: 0.25;
+        transition: opacity 0.15s;
+        padding: 0;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .fav-btn.active {
+        opacity: 1;
       }
     </style>
   </head>
@@ -493,7 +509,11 @@
         selected: null,
         showAll: false,
         hifiOnly: false,
+        favsOnly: false,
+        sortBy: "score",
         tagFilter: null,
+        heading: null,
+        compassOn: false,
         errMsg: "",
       };
 
@@ -864,8 +884,7 @@ out center body;`;
               cy: 0,
             };
           })
-          .filter((p) => p.lat != null && p.lon != null)
-          .sort((a, b) => b.score - a.score);
+          .filter((p) => p.lat != null && p.lon != null);
 
         if (getProxyUrl()) {
           try {
@@ -954,6 +973,7 @@ out center body;`;
         ctx.restore();
 
         // Cardinal labels
+        const hOff = S.compassOn && S.heading != null ? S.heading : 0;
         ctx.fillStyle = "rgba(245,158,11,0.55)";
         ctx.font = `600 ${L * 0.028}px -apple-system, sans-serif`;
         [
@@ -962,7 +982,7 @@ out center body;`;
           ["S", 180],
           ["W", 270],
         ].forEach(([lbl, deg]) => {
-          const a = ((deg - 90) * Math.PI) / 180;
+          const a = ((deg - hOff - 90) * Math.PI) / 180;
           const lr = maxR + 14;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
@@ -971,7 +991,7 @@ out center body;`;
 
         // Pub dots
         getVisiblePubs().forEach((pub) => {
-          const a = ((pub.bearing - 90) * Math.PI) / 180;
+          const a = ((pub.bearing - hOff - 90) * Math.PI) / 180;
           const dr = Math.min(pub.dist / S.radius, 1) * maxR;
           const px = cx + Math.cos(a) * dr;
           const py = cy + Math.sin(a) * dr;
@@ -1053,6 +1073,59 @@ out center body;`;
         }
       }
 
+      // ── Favourites ─────────────────────────────────────────────────────────────
+      const FAV_LS = "pubfinder_favs";
+      function getFavs() {
+        return new Set(JSON.parse(localStorage.getItem(FAV_LS) || "[]"));
+      }
+      function toggleFav(id, e) {
+        if (e) e.stopPropagation();
+        const f = getFavs();
+        f.has(id) ? f.delete(id) : f.add(id);
+        localStorage.setItem(FAV_LS, JSON.stringify([...f]));
+        render();
+      }
+
+      // ── Compass ────────────────────────────────────────────────────────────────
+      function onOrientation(e) {
+        const h =
+          e.webkitCompassHeading != null
+            ? e.webkitCompassHeading
+            : e.alpha != null
+              ? (360 - e.alpha) % 360
+              : null;
+        if (h == null) return;
+        S.heading = h;
+        const canvas = document.getElementById("radar");
+        if (canvas) drawRadar(canvas);
+      }
+      function toggleCompass() {
+        if (S.compassOn) {
+          S.compassOn = false;
+          S.heading = null;
+          window.removeEventListener("deviceorientation", onOrientation, true);
+          render();
+          return;
+        }
+        const start = () => {
+          S.compassOn = true;
+          window.addEventListener("deviceorientation", onOrientation, true);
+          render();
+        };
+        if (
+          typeof DeviceOrientationEvent !== "undefined" &&
+          typeof DeviceOrientationEvent.requestPermission === "function"
+        ) {
+          DeviceOrientationEvent.requestPermission()
+            .then((s) => {
+              if (s === "granted") start();
+            })
+            .catch(() => {});
+        } else {
+          start();
+        }
+      }
+
       function filterByTag(tag, e) {
         if (e) e.stopPropagation();
         S.tagFilter = S.tagFilter === tag ? null : tag;
@@ -1062,13 +1135,16 @@ out center body;`;
       function getVisiblePubs() {
         let pubs = S.showAll ? S.pubs : S.pubs.filter((p) => p.score >= 4);
         if (S.hifiOnly) pubs = pubs.filter((p) => p.hifi);
+        if (S.favsOnly) pubs = pubs.filter((p) => getFavs().has(p.id));
         if (S.tagFilter)
           pubs = pubs.filter(
             (p) =>
               p.badges.some((b) => b.t === S.tagFilter) ||
               (S.tagFilter === "🏆 Award winner" && p.award),
           );
-        return pubs;
+        return [...pubs].sort((a, b) =>
+          S.sortBy === "distance" ? a.dist - b.dist : b.score - a.score,
+        );
       }
 
       // ── Settings ───────────────────────────────────────────────────────────────
@@ -1143,7 +1219,8 @@ out center body;`;
         return `<div class="header">
   <div class="top-row">
     <span class="app-title">🍺 Good Pubs Near Me</span>
-    <button class="settings-btn" onclick="toggleSettings()" title="Settings">⚙️</button>
+    <button class="settings-btn${S.compassOn ? " active" : ""}" onclick="toggleCompass()" title="Compass">🧭</button>
+    <button class="settings-btn${settingsOpen ? " active" : ""}" onclick="toggleSettings()" title="Settings">⚙️</button>
   </div>
   ${panel}
   <div class="search-row">
@@ -1185,9 +1262,17 @@ out center body;`;
     <span class="filter-toggle-icon">🔊</span>
     <span>Hi-Fi only</span>
   </label>
+  <label class="filter-toggle${S.favsOnly ? " active" : ""}" onclick="S.favsOnly=!S.favsOnly;render()">
+    <span class="filter-toggle-icon">⭐</span>
+    <span>Saved</span>
+  </label>
   <label class="filter-toggle">
     <input type="checkbox" ${S.showAll ? "checked" : ""} onchange="S.showAll=this.checked;render()">
     <span>Show all</span>
+  </label>
+  <label class="filter-toggle" onclick="S.sortBy=S.sortBy==='score'?'distance':'score';render()">
+    <span class="filter-toggle-icon">${S.sortBy === "score" ? "🏆" : "📍"}</span>
+    <span>${S.sortBy === "score" ? "Vibes" : "Nearest"}</span>
   </label>
   ${S.tagFilter ? `<span class="filter-tag-active" onclick="S.tagFilter=null;render()">✕ ${S.tagFilter}</span>` : ""}
 </div>`;
@@ -1203,6 +1288,7 @@ out center body;`;
 </div>`;
         } else {
           const n = visiblePubs.length;
+          const favs = getFavs();
           cards =
             `<div class="results-header">${n} pub${n !== 1 ? "s" : ""}</div>` +
             visiblePubs
@@ -1214,6 +1300,7 @@ out center body;`;
                       ? `<span class="dim-badge">May be closed</span>`
                       : `<span class="dim-badge">Hours unknown</span>`;
                 const sel = S.selected?.id === pub.id;
+                const isFav = favs.has(pub.id);
                 const awardPill = pub.award
                   ? `<span class="pill trophy${S.tagFilter === "🏆 Award winner" ? " tag-active" : ""}" data-tag="🏆 Award winner" onclick="filterByTag(this.dataset.tag,event)">🏆 Award winner</span>`
                   : "";
@@ -1240,6 +1327,7 @@ out center body;`;
   <div class="card-footer">
     ${openHtml}
     <span class="footer-links">
+      <button class="fav-btn${isFav ? " active" : ""}" onclick="toggleFav(${pub.id},event)" title="${isFav ? "Unsave" : "Save"}">⭐</button>
       ${igBtn}
       <a class="maps-link" href="${mapsLink(pub.name, pub.lat, pub.lon)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Directions →</a>
     </span>

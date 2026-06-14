@@ -8,6 +8,7 @@ Personal lab for single-file web experiments. Each project is a self-contained H
 |------|------------|
 | [darksky_4.html](darksky_4.html) | Dark, minimal weather app — hourly timeline, 7-day strip, hyperlocal precip alerts, Disco mode |
 | [skyview.html](skyview.html) | Dual-view weather app — Living Sky (animated canvas) + Day Clock (24h analog face) |
+| [pubfinder.html](pubfinder.html) | Good pubs near you — sonar radar + scored cards, dives filtered out |
 
 ## Stack
 

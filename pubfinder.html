@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <title>Good Pubs Near Me</title>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --surface: #161b22;
+        --surface2: #21262d;
+        --border: rgba(255, 255, 255, 0.08);
+        --text: #e6edf3;
+        --text-dim: #8b949e;
+        --text-mid: #b1bac4;
+        --amber: #f59e0b;
+        --amber-bright: #fcd34d;
+        --green: #4ade80;
+        --blue: #4a9eff;
+        --safe-top: env(safe-area-inset-top, 0px);
+        --safe-bottom: env(safe-area-inset-bottom, 0px);
+        --font: -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font);
+        min-height: 100dvh;
+      }
+
+      /* ── Header ── */
+      .header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--bg);
+        padding: calc(var(--safe-top) + 14px) 16px 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      .top-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .app-title {
+        font-size: 17px;
+        font-weight: 700;
+        flex: 1;
+        letter-spacing: -0.2px;
+      }
+      .search-row {
+        display: flex;
+        gap: 8px;
+      }
+      .search-input {
+        flex: 1;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 15px;
+        padding: 9px 13px;
+        outline: none;
+      }
+      .search-input::placeholder {
+        color: var(--text-dim);
+      }
+      .search-input:focus {
+        border-color: var(--amber);
+      }
+      .locate-btn {
+        background: var(--amber);
+        border: none;
+        border-radius: 10px;
+        color: #000;
+        font-family: var(--font);
+        font-size: 14px;
+        font-weight: 700;
+        padding: 0 14px;
+        cursor: pointer;
+        white-space: nowrap;
+        line-height: 38px;
+      }
+      .locate-btn:active {
+        opacity: 0.8;
+      }
+
+      /* ── Radius bar ── */
+      .radius-bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 14px 16px 0;
+      }
+      .radius-label {
+        font-size: 12px;
+        color: var(--text-dim);
+        font-weight: 600;
+        margin-right: 2px;
+      }
+      .radius-btn {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text-dim);
+        font-family: var(--font);
+        font-size: 12px;
+        font-weight: 600;
+        padding: 5px 10px;
+        cursor: pointer;
+        transition:
+          border-color 0.15s,
+          color 0.15s;
+      }
+      .radius-btn.active {
+        border-color: var(--amber);
+        color: var(--amber);
+      }
+
+      /* ── Radar ── */
+      .radar-wrap {
+        display: flex;
+        justify-content: center;
+        padding: 16px;
+      }
+      #radar {
+        display: block;
+        border-radius: 50%;
+        cursor: pointer;
+      }
+
+      /* ── State screens ── */
+      .state-screen {
+        min-height: 52vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        color: var(--text-dim);
+        font-size: 15px;
+        text-align: center;
+        padding: 0 32px;
+      }
+      .state-screen .big {
+        font-size: 52px;
+      }
+      .state-screen .title {
+        color: var(--text);
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .spinner {
+        width: 36px;
+        height: 36px;
+        border: 3px solid var(--surface2);
+        border-top-color: var(--amber);
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* ── Results ── */
+      .results-header {
+        padding: 4px 16px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text-dim);
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+      }
+
+      /* ── Pub card ── */
+      .pub-card {
+        margin: 0 16px 10px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        cursor: pointer;
+        transition: border-color 0.15s;
+      }
+      .pub-card.selected {
+        border-color: var(--amber);
+      }
+      .pub-card:active {
+        opacity: 0.85;
+      }
+      .card-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 6px;
+      }
+      .pub-name {
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .pub-meta {
+        font-size: 12px;
+        color: var(--text-dim);
+        margin-top: 3px;
+      }
+      .pint-score {
+        font-size: 19px;
+        white-space: nowrap;
+        flex-shrink: 0;
+        line-height: 1;
+      }
+      .pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 9px;
+      }
+      .pill {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 3px 9px;
+        font-size: 11px;
+        color: var(--text-mid);
+        white-space: nowrap;
+      }
+      .pill.gold {
+        border-color: rgba(245, 158, 11, 0.38);
+        color: var(--amber);
+      }
+      .card-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 11px;
+        padding-top: 11px;
+        border-top: 1px solid var(--border);
+      }
+      .open-badge {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 6px;
+        background: rgba(74, 222, 128, 0.12);
+        color: var(--green);
+      }
+      .dim-badge {
+        font-size: 11px;
+        color: var(--text-dim);
+      }
+      .maps-link {
+        font-size: 12px;
+        color: var(--amber);
+        font-weight: 600;
+        text-decoration: none;
+        padding: 4px 10px;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+        border-radius: 8px;
+        white-space: nowrap;
+      }
+
+      .empty-state {
+        padding: 40px 16px;
+        text-align: center;
+        color: var(--text-dim);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      .empty-state .big {
+        font-size: 40px;
+        margin-bottom: 10px;
+      }
+
+      .bottom-pad {
+        height: calc(var(--safe-bottom) + 32px);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // ── State ──────────────────────────────────────────────────────────────────
+      const S = {
+        phase: "idle", // idle | loading | ready | error
+        lat: null,
+        lon: null,
+        pubs: [],
+        radius: 1000,
+        selected: null,
+        errMsg: "",
+      };
+
+      // ── Chain blacklist ────────────────────────────────────────────────────────
+      const CHAINS = [
+        "wetherspoon",
+        "o'neill",
+        "oneill",
+        "yates",
+        "walkabout",
+        "lloyds no",
+        "slug and lettuce",
+        "revolution bar",
+        "hamilton bar",
+        "bar and grill",
+      ];
+
+      // ── Scoring ────────────────────────────────────────────────────────────────
+      function vibeScore(tags, name) {
+        const n = (name || "").toLowerCase();
+        if (CHAINS.some((c) => n.includes(c))) return 0;
+        let s = 3;
+        if (tags.real_ale === "yes") s += 2;
+        if (tags.craft_beer === "yes") s += 1;
+        if (tags.microbrewery === "yes") s += 2;
+        if (tags.beer_garden === "yes" || tags.outdoor_seating === "yes")
+          s += 2;
+        if (tags.live_music === "yes") s += 2;
+        if (tags.dog === "yes") s += 1;
+        if (tags.food === "yes" || tags.cuisine) s += 1;
+        if (tags.real_fire === "yes") s += 1;
+        if (tags.website) s += 1;
+        return Math.min(10, s);
+      }
+
+      function qualityBadges(tags) {
+        const b = [];
+        if (tags.real_ale === "yes") b.push({ t: "Real Ale", gold: true });
+        if (tags.microbrewery === "yes")
+          b.push({ t: "Microbrewery", gold: true });
+        if (tags.craft_beer === "yes") b.push({ t: "Craft Beer", gold: true });
+        if (tags.beer_garden === "yes" || tags.outdoor_seating === "yes")
+          b.push({ t: "Beer Garden", gold: false });
+        if (tags.live_music === "yes") b.push({ t: "Live Music", gold: false });
+        if (tags.real_fire === "yes")
+          b.push({ t: "🔥 Real Fire", gold: false });
+        if (tags.dog === "yes") b.push({ t: "🐕 Dogs OK", gold: false });
+        if (tags.food === "yes" || tags.cuisine)
+          b.push({ t: "Food", gold: false });
+        if (tags.wheelchair === "yes") b.push({ t: "Accessible", gold: false });
+        return b;
+      }
+
+      function pints(score) {
+        const filled = Math.round(score / 2);
+        return Array.from(
+          { length: 5 },
+          (_, i) => `<span style="opacity:${i < filled ? 1 : 0.14}">🍺</span>`,
+        ).join("");
+      }
+
+      // ── Geo ────────────────────────────────────────────────────────────────────
+      function haversine(lat1, lon1, lat2, lon2) {
+        const R = 6371000;
+        const dL = ((lat2 - lat1) * Math.PI) / 180,
+          dO = ((lon2 - lon1) * Math.PI) / 180;
+        const a =
+          Math.sin(dL / 2) ** 2 +
+          Math.cos((lat1 * Math.PI) / 180) *
+            Math.cos((lat2 * Math.PI) / 180) *
+            Math.sin(dO / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      }
+
+      function bearingDeg(lat1, lon1, lat2, lon2) {
+        const dL = ((lon2 - lon1) * Math.PI) / 180;
+        const y = Math.sin(dL) * Math.cos((lat2 * Math.PI) / 180);
+        const x =
+          Math.cos((lat1 * Math.PI) / 180) * Math.sin((lat2 * Math.PI) / 180) -
+          Math.sin((lat1 * Math.PI) / 180) *
+            Math.cos((lat2 * Math.PI) / 180) *
+            Math.cos(dL);
+        return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+      }
+
+      const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+      function compass(deg) {
+        return COMPASS[Math.round(deg / 45) % 8];
+      }
+
+      function fmtDist(m) {
+        return m < 1000 ? Math.round(m) + "m" : (m / 1000).toFixed(1) + "km";
+      }
+
+      function mapsLink(name, lat, lon) {
+        const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        if (ios)
+          return `https://maps.apple.com/?q=${encodeURIComponent(name)}&ll=${lat},${lon}`;
+        return `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+      }
+
+      // Best-effort opening hours check
+      function openStatus(h) {
+        if (!h) return null;
+        try {
+          const now = new Date();
+          const cur = now.getHours() + now.getMinutes() / 60;
+          const m = h.match(/(\d{1,2}:\d{2})-(\d{1,2}:\d{2})/);
+          if (!m) return null;
+          const parse = (t) => {
+            const [hh, mm] = t.split(":").map(Number);
+            return hh + mm / 60;
+          };
+          const o = parse(m[1]),
+            c = parse(m[2]);
+          return cur >= o && cur < (c < o ? c + 24 : c);
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // ── Overpass fetch ─────────────────────────────────────────────────────────
+      async function fetchPubs(lat, lon, radius) {
+        const q = `[out:json][timeout:25];
+(
+  node["amenity"="pub"](around:${radius},${lat},${lon});
+  way["amenity"="pub"](around:${radius},${lat},${lon});
+);
+out center body;`;
+        const res = await fetch("https://overpass-api.de/api/interpreter", {
+          method: "POST",
+          body: q,
+        });
+        if (!res.ok) throw new Error("Overpass error");
+        const data = await res.json();
+        return data.elements
+          .filter((el) => el.tags?.name)
+          .map((el) => {
+            const lat2 = el.lat ?? el.center?.lat;
+            const lon2 = el.lon ?? el.center?.lon;
+            const tags = el.tags || {};
+            const name = tags.name;
+            return {
+              id: el.id,
+              name,
+              lat: lat2,
+              lon: lon2,
+              tags,
+              score: vibeScore(tags, name),
+              badges: qualityBadges(tags),
+              dist: haversine(lat, lon, lat2, lon2),
+              bearing: bearingDeg(lat, lon, lat2, lon2),
+              open: openStatus(tags.opening_hours),
+              cx: 0,
+              cy: 0, // set during radar draw
+            };
+          })
+          .filter((p) => p.score >= 4 && p.lat != null && p.lon != null)
+          .sort((a, b) => b.score - a.score);
+      }
+
+      // ── Radar ──────────────────────────────────────────────────────────────────
+      let dots = []; // [{id, cx, cy, hitR}] for tap detection
+
+      function scoreColor(s) {
+        if (s >= 9) return "#4ade80";
+        if (s >= 7) return "#fcd34d";
+        if (s >= 5) return "#f59e0b";
+        return "#6b7280";
+      }
+
+      function drawRadar(canvas) {
+        const dpr = window.devicePixelRatio || 1;
+        const size = Math.min(window.innerWidth - 32, 400);
+        canvas.style.width = size + "px";
+        canvas.style.height = size + "px";
+        canvas.width = size * dpr;
+        canvas.height = size * dpr;
+        const ctx = canvas.getContext("2d");
+        ctx.scale(dpr, dpr);
+        const L = size,
+          cx = L / 2,
+          cy = L / 2,
+          maxR = L / 2 - 22;
+        dots = [];
+
+        // Disc background
+        ctx.beginPath();
+        ctx.arc(cx, cy, maxR + 2, 0, Math.PI * 2);
+        ctx.fillStyle = "#0d1117";
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx, cy, maxR + 2, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(245,158,11,0.22)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Distance rings + labels
+        const ringMetres =
+          S.radius <= 250
+            ? [125]
+            : S.radius <= 500
+              ? [250, 500]
+              : S.radius <= 1000
+                ? [333, 666, 1000]
+                : [500, 1000, 1500, 2000];
+        ringMetres.forEach((m) => {
+          const r = (m / S.radius) * maxR;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(255,255,255,0.05)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.fillStyle = "rgba(255,255,255,0.18)";
+          ctx.font = `${L * 0.026}px -apple-system, sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.fillText(fmtDist(m), cx, cy - r + 3);
+        });
+
+        // Crosshairs
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,255,255,0.04)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 5]);
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - maxR);
+        ctx.lineTo(cx, cy + maxR);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx - maxR, cy);
+        ctx.lineTo(cx + maxR, cy);
+        ctx.stroke();
+        ctx.restore();
+
+        // Cardinal labels
+        ctx.fillStyle = "rgba(245,158,11,0.55)";
+        ctx.font = `600 ${L * 0.028}px -apple-system, sans-serif`;
+        [
+          ["N", 0],
+          ["E", 90],
+          ["S", 180],
+          ["W", 270],
+        ].forEach(([lbl, deg]) => {
+          const a = ((deg - 90) * Math.PI) / 180;
+          const lr = maxR + 14;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(lbl, cx + Math.cos(a) * lr, cy + Math.sin(a) * lr);
+        });
+
+        // Pub dots
+        S.pubs.forEach((pub) => {
+          const a = ((pub.bearing - 90) * Math.PI) / 180;
+          const dr = Math.min(pub.dist / S.radius, 1) * maxR;
+          const px = cx + Math.cos(a) * dr;
+          const py = cy + Math.sin(a) * dr;
+          pub.cx = px;
+          pub.cy = py;
+
+          const dotR = 4 + (pub.score / 10) * 7;
+          const col = scoreColor(pub.score);
+          const sel = S.selected?.id === pub.id;
+
+          // Glow
+          if (sel || pub.score >= 6) {
+            const g = ctx.createRadialGradient(px, py, 0, px, py, dotR * 3.5);
+            g.addColorStop(0, col + "44");
+            g.addColorStop(1, "transparent");
+            ctx.beginPath();
+            ctx.arc(px, py, dotR * 3.5, 0, Math.PI * 2);
+            ctx.fillStyle = g;
+            ctx.fill();
+          }
+
+          // Selection ring
+          if (sel) {
+            ctx.beginPath();
+            ctx.arc(px, py, dotR + 5, 0, Math.PI * 2);
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }
+
+          // Dot
+          ctx.beginPath();
+          ctx.arc(px, py, dotR, 0, Math.PI * 2);
+          ctx.fillStyle = col;
+          ctx.fill();
+
+          dots.push({ id: pub.id, cx: px, cy: py, hitR: dotR + 9 });
+        });
+
+        // User dot
+        const ug = ctx.createRadialGradient(cx, cy, 0, cx, cy, 14);
+        ug.addColorStop(0, "rgba(74,158,255,0.35)");
+        ug.addColorStop(1, "transparent");
+        ctx.beginPath();
+        ctx.arc(cx, cy, 14, 0, Math.PI * 2);
+        ctx.fillStyle = ug;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+        ctx.fillStyle = "#4a9eff";
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = "#fff";
+        ctx.fill();
+      }
+
+      function onRadarTap(e) {
+        const canvas = document.getElementById("radar");
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const scale =
+          canvas.width / rect.width / (window.devicePixelRatio || 1);
+        const mx = (e.clientX - rect.left) * scale;
+        const my = (e.clientY - rect.top) * scale;
+        const hit = dots.find((d) => Math.hypot(mx - d.cx, my - d.cy) < d.hitR);
+        if (!hit) return;
+        S.selected =
+          S.selected?.id === hit.id
+            ? null
+            : S.pubs.find((p) => p.id === hit.id) || null;
+        render();
+        if (S.selected) {
+          requestAnimationFrame(() => {
+            document
+              .getElementById("card-" + hit.id)
+              ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          });
+        }
+      }
+
+      // ── HTML ───────────────────────────────────────────────────────────────────
+      function header() {
+        return `<div class="header">
+  <div class="top-row">
+    <span class="app-title">🍺 Good Pubs Near Me</span>
+  </div>
+  <div class="search-row">
+    <input class="search-input" id="si" type="search" placeholder="Search a neighbourhood…" autocomplete="off" spellcheck="false">
+    <button class="locate-btn" onclick="locate()">📍 Find Me</button>
+  </div>
+</div>`;
+      }
+
+      function body() {
+        if (S.phase === "idle")
+          return `<div class="state-screen">
+  <div class="big">🍺</div>
+  <div class="title">Good Pubs Near Me</div>
+  <p>Real ale, decent atmosphere, none of the dives.<br>Search a neighbourhood or use your location.</p>
+</div>`;
+
+        if (S.phase === "loading")
+          return `<div class="state-screen">
+  <div class="spinner"></div>
+  <p>Scanning for decent pubs…</p>
+</div>`;
+
+        if (S.phase === "error")
+          return `<div class="state-screen">
+  <div class="big">😬</div>
+  <div class="title">Something went wrong</div>
+  <p>${S.errMsg}</p>
+</div>`;
+
+        const radii = [250, 500, 1000, 2000];
+        const radiusBar = `<div class="radius-bar">
+  <span class="radius-label">Radius</span>
+  ${radii.map((r) => `<button class="radius-btn${S.radius === r ? " active" : ""}" onclick="setRadius(${r})">${fmtDist(r)}</button>`).join("")}
+</div>`;
+
+        const radar = `<div class="radar-wrap"><canvas id="radar"></canvas></div>`;
+
+        let cards;
+        if (!S.pubs.length) {
+          cards = `<div class="empty-state">
+  <div class="big">🙈</div>
+  No quality pubs found within ${fmtDist(S.radius)}.<br>Try a larger radius.
+</div>`;
+        } else {
+          const n = S.pubs.length;
+          cards =
+            `<div class="results-header">${n} decent pub${n !== 1 ? "s" : ""}</div>` +
+            S.pubs
+              .map((pub) => {
+                const openHtml =
+                  pub.open === true
+                    ? `<span class="open-badge">Open now</span>`
+                    : pub.open === false
+                      ? `<span class="dim-badge">May be closed</span>`
+                      : `<span class="dim-badge">Hours unknown</span>`;
+                const sel = S.selected?.id === pub.id;
+                return `<div class="pub-card${sel ? " selected" : ""}" id="card-${pub.id}" onclick="selectPub(${pub.id})">
+  <div class="card-top">
+    <div>
+      <div class="pub-name">${pub.name}</div>
+      <div class="pub-meta">${fmtDist(pub.dist)} · ${compass(pub.bearing)}</div>
+    </div>
+    <div class="pint-score">${pints(pub.score)}</div>
+  </div>
+  ${pub.badges.length ? `<div class="pills">${pub.badges.map((b) => `<span class="pill${b.gold ? " gold" : ""}">${b.t}</span>`).join("")}</div>` : ""}
+  <div class="card-footer">
+    ${openHtml}
+    <a class="maps-link" href="${mapsLink(pub.name, pub.lat, pub.lon)}" target="_blank" rel="noopener">Directions →</a>
+  </div>
+</div>`;
+              })
+              .join("");
+        }
+
+        return radiusBar + radar + cards + `<div class="bottom-pad"></div>`;
+      }
+
+      // ── Render ─────────────────────────────────────────────────────────────────
+      function render() {
+        document.getElementById("root").innerHTML = header() + body();
+        const canvas = document.getElementById("radar");
+        if (canvas) {
+          drawRadar(canvas);
+          canvas.addEventListener("click", onRadarTap);
+        }
+      }
+
+      function selectPub(id) {
+        S.selected =
+          S.selected?.id === id
+            ? null
+            : S.pubs.find((p) => p.id === id) || null;
+        render();
+      }
+
+      function setRadius(r) {
+        if (r === S.radius || !S.lat) return;
+        S.radius = r;
+        S.selected = null;
+        S.phase = "loading";
+        render();
+        fetchPubs(S.lat, S.lon, r)
+          .then((pubs) => {
+            S.pubs = pubs;
+            S.phase = "ready";
+            render();
+          })
+          .catch(() => {
+            S.errMsg = "Could not load pubs. Try again.";
+            S.phase = "error";
+            render();
+          });
+      }
+
+      // ── Locate & search ────────────────────────────────────────────────────────
+      function locate() {
+        if (!navigator.geolocation) {
+          S.errMsg = "Geolocation not available.";
+          S.phase = "error";
+          render();
+          return;
+        }
+        S.phase = "loading";
+        render();
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            try {
+              S.lat = pos.coords.latitude;
+              S.lon = pos.coords.longitude;
+              S.pubs = await fetchPubs(S.lat, S.lon, S.radius);
+              S.phase = "ready";
+            } catch (e) {
+              S.errMsg = "Could not load pubs. Try again.";
+              S.phase = "error";
+            }
+            render();
+          },
+          () => {
+            S.errMsg = "Location access denied.";
+            S.phase = "error";
+            render();
+          },
+          { timeout: 12000, enableHighAccuracy: true },
+        );
+      }
+
+      async function searchArea(q) {
+        if (!q.trim()) return;
+        S.phase = "loading";
+        render();
+        try {
+          const res = await fetch(
+            `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en`,
+          );
+          const d = await res.json();
+          if (!d.results?.length) throw new Error("not found");
+          const { latitude: lat, longitude: lon } = d.results[0];
+          S.lat = lat;
+          S.lon = lon;
+          S.pubs = await fetchPubs(lat, lon, S.radius);
+          S.phase = "ready";
+        } catch (e) {
+          S.errMsg =
+            e.message === "not found"
+              ? "Location not found."
+              : "Could not load pubs.";
+          S.phase = "error";
+        }
+        render();
+      }
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && e.target?.id === "si")
+          searchArea(e.target.value);
+      });
+
+      render();
+    </script>
+  </body>
+</html>

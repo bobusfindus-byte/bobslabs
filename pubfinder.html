@@ -496,6 +496,29 @@
         });
       }
 
+      // ── Curated notable venues (name + optional postcode prefix) ──────────────
+      // normName of the OSM name, optional pc = postcode prefix to avoid false matches
+      const NOTABLE_VENUES = [
+        { n: "a l p h a b e t", pc: "BN1", badge: "🎧 Audiophile", pts: 3 },
+        { n: "windmill", pc: "BN1", badge: "🎧 Music venue", pts: 2 },
+      ];
+
+      function getNotable(name, tags) {
+        const n = normName(name);
+        const pc = (tags["addr:postcode"] || "")
+          .toUpperCase()
+          .replace(/\s/g, "");
+        return (
+          NOTABLE_VENUES.find(
+            (v) =>
+              (n === v.n ||
+                n.startsWith(v.n + " ") ||
+                v.n.startsWith(n + " ")) &&
+              (!v.pc || pc.startsWith(v.pc.replace(/\s/g, ""))),
+          ) || null
+        );
+      }
+
       // ── Chain blacklist ────────────────────────────────────────────────────────
       const CHAINS = [
         "wetherspoon",
@@ -533,6 +556,8 @@
         if (tags.real_fire === "yes") s += 1;
         if (tags.website) s += 1;
         if (isAwardWinner(name)) s += 3;
+        const notable = getNotable(name, tags);
+        if (notable) s += notable.pts;
         return Math.min(10, s);
       }
 
@@ -560,6 +585,8 @@
         if (tags.food === "yes" || tags.cuisine)
           b.push({ t: "Food", gold: false });
         if (tags.wheelchair === "yes") b.push({ t: "Accessible", gold: false });
+        const notable = getNotable(tags.name || "", tags);
+        if (notable) b.push({ t: notable.badge, gold: true });
         return b;
       }
 

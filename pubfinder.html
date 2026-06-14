@@ -133,6 +133,34 @@
         color: var(--amber);
       }
 
+      /* ── Filter bar ── */
+      .filter-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px 0;
+      }
+      .filter-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        user-select: none;
+      }
+      .filter-toggle input[type="checkbox"] {
+        accent-color: var(--amber);
+        width: 15px;
+        height: 15px;
+        cursor: pointer;
+      }
+      .filter-note {
+        font-size: 11px;
+        color: var(--text-dim);
+      }
+
       /* ── Radar ── */
       .radar-wrap {
         display: flex;
@@ -413,6 +441,7 @@
         pubs: [],
         radius: 1000,
         selected: null,
+        showAll: false,
         errMsg: "",
       };
 
@@ -491,7 +520,14 @@
         if (tags.microbrewery === "yes") s += 2;
         if (tags.beer_garden === "yes" || tags.outdoor_seating === "yes")
           s += 2;
-        if (tags.live_music === "yes") s += 2;
+        if (tags.live_music === "yes" || tags["music:live"] === "yes") s += 2;
+        if (
+          tags["music:dj"] === "yes" ||
+          tags.music === "dj" ||
+          tags.dj === "yes"
+        )
+          s += 2;
+        if (tags["music:genre"]) s += 1;
         if (tags.dog === "yes") s += 1;
         if (tags.food === "yes" || tags.cuisine) s += 1;
         if (tags.real_fire === "yes") s += 1;
@@ -508,7 +544,16 @@
         if (tags.craft_beer === "yes") b.push({ t: "Craft Beer", gold: true });
         if (tags.beer_garden === "yes" || tags.outdoor_seating === "yes")
           b.push({ t: "Beer Garden", gold: false });
-        if (tags.live_music === "yes") b.push({ t: "Live Music", gold: false });
+        if (tags.live_music === "yes" || tags["music:live"] === "yes")
+          b.push({ t: "🎵 Live Music", gold: false });
+        if (
+          tags["music:dj"] === "yes" ||
+          tags.music === "dj" ||
+          tags.dj === "yes"
+        )
+          b.push({ t: "🎧 DJ Nights", gold: false });
+        if (tags["music:genre"])
+          b.push({ t: `🎶 ${tags["music:genre"]}`, gold: false });
         if (tags.real_fire === "yes")
           b.push({ t: "🔥 Real Fire", gold: false });
         if (tags.dog === "yes") b.push({ t: "🐕 Dogs OK", gold: false });
@@ -685,7 +730,7 @@ out center body;`;
               cy: 0,
             };
           })
-          .filter((p) => p.score >= 4 && p.lat != null && p.lon != null)
+          .filter((p) => p.lat != null && p.lon != null)
           .sort((a, b) => b.score - a.score);
 
         const key = getFsqKey();
@@ -743,7 +788,9 @@ out center body;`;
               ? [250, 500]
               : S.radius <= 1000
                 ? [333, 666, 1000]
-                : [500, 1000, 1500, 2000];
+                : S.radius <= 2000
+                  ? [500, 1000, 1500, 2000]
+                  : [1000, 2500, 5000];
         ringMetres.forEach((m) => {
           const r = (m / S.radius) * maxR;
           ctx.beginPath();
@@ -790,7 +837,7 @@ out center body;`;
         });
 
         // Pub dots
-        S.pubs.forEach((pub) => {
+        getVisiblePubs().forEach((pub) => {
           const a = ((pub.bearing - 90) * Math.PI) / 180;
           const dr = Math.min(pub.dist / S.radius, 1) * maxR;
           const px = cx + Math.cos(a) * dr;
@@ -873,6 +920,10 @@ out center body;`;
         }
       }
 
+      function getVisiblePubs() {
+        return S.showAll ? S.pubs : S.pubs.filter((p) => p.score >= 4);
+      }
+
       // ── Settings ───────────────────────────────────────────────────────────────
       let settingsOpen = false;
       function toggleSettings() {
@@ -937,25 +988,34 @@ out center body;`;
   <p>${S.errMsg}</p>
 </div>`;
 
-        const radii = [250, 500, 1000, 2000];
+        const radii = [250, 500, 1000, 2000, 5000];
         const radiusBar = `<div class="radius-bar">
   <span class="radius-label">Radius</span>
   ${radii.map((r) => `<button class="radius-btn${S.radius === r ? " active" : ""}" onclick="setRadius(${r})">${fmtDist(r)}</button>`).join("")}
 </div>`;
 
+        const filterBar = `<div class="filter-bar">
+  <label class="filter-toggle">
+    <input type="checkbox" ${S.showAll ? "checked" : ""} onchange="S.showAll=this.checked;render()">
+    <span>Show all pubs</span>
+  </label>
+  <span class="filter-note">${S.showAll ? "Showing everything incl. chains &amp; dives" : "Low-scored &amp; chains hidden"}</span>
+</div>`;
+
         const radar = `<div class="radar-wrap"><canvas id="radar"></canvas></div>`;
 
+        const visiblePubs = getVisiblePubs();
         let cards;
-        if (!S.pubs.length) {
+        if (!visiblePubs.length) {
           cards = `<div class="empty-state">
   <div class="big">🙈</div>
-  No quality pubs found within ${fmtDist(S.radius)}.<br>Try a larger radius.
+  No pubs found within ${fmtDist(S.radius)}. Try a larger radius${S.showAll ? "" : " or toggle Show all pubs"}.
 </div>`;
         } else {
-          const n = S.pubs.length;
+          const n = visiblePubs.length;
           cards =
-            `<div class="results-header">${n} decent pub${n !== 1 ? "s" : ""}</div>` +
-            S.pubs
+            `<div class="results-header">${n} pub${n !== 1 ? "s" : ""}</div>` +
+            visiblePubs
               .map((pub) => {
                 const openHtml =
                   pub.open === true
@@ -999,7 +1059,13 @@ out center body;`;
               .join("");
         }
 
-        return radiusBar + radar + cards + `<div class="bottom-pad"></div>`;
+        return (
+          radiusBar +
+          filterBar +
+          radar +
+          cards +
+          `<div class="bottom-pad"></div>`
+        );
       }
 
       // ── Render ─────────────────────────────────────────────────────────────────

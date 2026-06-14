@@ -768,25 +768,6 @@
         });
       }
 
-      async function enrichFsqDetails(pubs) {
-        const proxy = getProxyUrl();
-        if (!proxy) return;
-        const matched = pubs.filter((p) => p.fsqId).slice(0, 5);
-        for (const pub of matched) {
-          await new Promise((r) => setTimeout(r, 600));
-          try {
-            const res = await fetch(
-              `${proxy}/places/${pub.fsqId}?fields=hours,rating`,
-            );
-            if (!res.ok) break;
-            const d = await res.json();
-            const openNow = d.hours?.open_now ?? d.hours?.is_open_now;
-            if (openNow != null) pub.open = openNow;
-            if (d.rating != null) pub.fsqRating = d.rating;
-          } catch (_) {}
-        }
-      }
-
       // ── Instagram ──────────────────────────────────────────────────────────────
       function instagramLink(tags) {
         const h =
@@ -869,7 +850,6 @@ out center body;`;
           try {
             const fsqResults = await fetchFsqPubs(lat, lon, radius);
             mergeFsq(pubs, fsqResults);
-            await enrichFsqDetails(pubs);
           } catch (_) {}
         }
 
@@ -1103,31 +1083,7 @@ out center body;`;
           const withIg = results.filter(
             (r) => r.social_media?.instagram,
           ).length;
-          let hoursNote = "";
-          const firstId = results[0]?.fsq_place_id;
-          if (firstId) {
-            await new Promise((r) => setTimeout(r, 600));
-            try {
-              const dr = await fetch(
-                `${url.replace(/\/$/, "")}/places/${firstId}?fields=hours,rating`,
-              );
-              if (dr.ok) {
-                const dd = await dr.json();
-                const openNow = dd.hours?.open_now ?? dd.hours?.is_open_now;
-                hoursNote =
-                  openNow != null
-                    ? ` · hours ✓ (${openNow ? "open" : "closed"})`
-                    : dd.hours
-                      ? " · hours field present but no open_now"
-                      : " · no hours in detail response";
-              } else {
-                hoursNote = ` · detail call failed (${dr.status})`;
-              }
-            } catch (e) {
-              hoursNote = ` · detail error: ${e.message}`;
-            }
-          }
-          el.textContent = `✓ ${results.length} venues, ${withIg} with Instagram${hoursNote}`;
+          el.textContent = `✓ Proxy works — ${results.length} venues, ${withIg} with Instagram`;
           el.className = "fsq-test ok";
         } catch (e) {
           el.textContent = `✗ ${e.message}`;
@@ -1217,17 +1173,12 @@ out center body;`;
             `<div class="results-header">${n} pub${n !== 1 ? "s" : ""}</div>` +
             visiblePubs
               .map((pub) => {
-                const hoursSource = pub.fsqId
-                  ? ""
-                  : ' title="From OSM — may be inaccurate"';
                 const openHtml =
                   pub.open === true
-                    ? `<span class="open-badge"${hoursSource}>Open now</span>`
+                    ? `<span class="open-badge">Open now</span>`
                     : pub.open === false
-                      ? `<span class="dim-badge"${hoursSource}>May be closed</span>`
-                      : pub.fsqId
-                        ? `<span class="dim-badge">No hours listed</span>`
-                        : `<span class="dim-badge">Hours unknown</span>`;
+                      ? `<span class="dim-badge">May be closed</span>`
+                      : `<span class="dim-badge">Hours unknown</span>`;
                 const sel = S.selected?.id === pub.id;
                 const awardPill = pub.award
                   ? `<span class="pill trophy">🏆 Award winner</span>`

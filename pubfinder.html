@@ -458,6 +458,26 @@
         color: #facc15;
         background: rgba(250, 204, 21, 0.08);
       }
+
+      .pill {
+        cursor: pointer;
+      }
+      .pill.tag-active {
+        background: rgba(245, 158, 11, 0.18);
+        border-color: var(--amber);
+        color: var(--amber);
+      }
+      .filter-tag-active {
+        margin-left: auto;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--amber);
+        cursor: pointer;
+        padding: 4px 8px;
+        border: 1px solid rgba(245, 158, 11, 0.4);
+        border-radius: 8px;
+        white-space: nowrap;
+      }
     </style>
   </head>
   <body>
@@ -473,6 +493,7 @@
         selected: null,
         showAll: false,
         hifiOnly: false,
+        tagFilter: null,
         errMsg: "",
       };
 
@@ -1032,9 +1053,20 @@ out center body;`;
         }
       }
 
+      function filterByTag(tag) {
+        S.tagFilter = S.tagFilter === tag ? null : tag;
+        render();
+      }
+
       function getVisiblePubs() {
         let pubs = S.showAll ? S.pubs : S.pubs.filter((p) => p.score >= 4);
         if (S.hifiOnly) pubs = pubs.filter((p) => p.hifi);
+        if (S.tagFilter)
+          pubs = pubs.filter(
+            (p) =>
+              p.badges.some((b) => b.t === S.tagFilter) ||
+              (S.tagFilter === "🏆 Award winner" && p.award),
+          );
         return pubs;
       }
 
@@ -1156,6 +1188,7 @@ out center body;`;
     <input type="checkbox" ${S.showAll ? "checked" : ""} onchange="S.showAll=this.checked;render()">
     <span>Show all</span>
   </label>
+  ${S.tagFilter ? `<span class="filter-tag-active" onclick="S.tagFilter=null;render()">✕ ${S.tagFilter}</span>` : ""}
 </div>`;
 
         const radar = `<div class="radar-wrap"><canvas id="radar"></canvas></div>`;
@@ -1181,7 +1214,7 @@ out center body;`;
                       : `<span class="dim-badge">Hours unknown</span>`;
                 const sel = S.selected?.id === pub.id;
                 const awardPill = pub.award
-                  ? `<span class="pill trophy">🏆 Award winner</span>`
+                  ? `<span class="pill trophy${S.tagFilter === "🏆 Award winner" ? " tag-active" : ""}" onclick="filterByTag('🏆 Award winner');event.stopPropagation()">🏆 Award winner</span>`
                   : "";
                 const fsqChip =
                   pub.fsqRating != null
@@ -1192,7 +1225,7 @@ out center body;`;
                   : "";
                 const pillsRow =
                   pub.award || pub.badges.length
-                    ? `<div class="pills">${awardPill}${pub.badges.map((b) => `<span class="pill${b.gold ? " gold" : ""}">${b.t}</span>`).join("")}</div>`
+                    ? `<div class="pills">${awardPill}${pub.badges.map((b) => `<span class="pill${b.gold ? " gold" : ""}${S.tagFilter === b.t ? " tag-active" : ""}" onclick="filterByTag(${JSON.stringify(b.t)});event.stopPropagation()">${b.t}</span>`).join("")}</div>`
                     : "";
                 return `<div class="pub-card${sel ? " selected" : ""}" id="card-${pub.id}" onclick="selectPub(${pub.id})">
   <div class="card-top">

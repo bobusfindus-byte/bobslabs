@@ -390,19 +390,12 @@
         border-radius: 6px;
         pointer-events: none;
         border: 1px solid rgba(255, 255, 255, 0.08);
-      }
-
-      .hour-row {
-        position: relative;
-        display: grid;
-        grid-template-columns: 50px 1fr 40px 46px;
-        align-items: center;
-        gap: 0 8px;
-        padding: 9px 0 9px 20px;
-        border-bottom: 1px solid var(--border);
+        overflow: hidden;
       }
       .star-dot {
         position: absolute;
+        width: 1.5px;
+        height: 1.5px;
         border-radius: 50%;
         background: #fff;
         pointer-events: none;
@@ -877,6 +870,20 @@
           );
         const gradient = 'linear-gradient(to bottom,' + stops.join(',') + ')';
 
+        // Tiny star pinpricks on the bar for clear-sky night hours
+        const n = dayHours.length;
+        const barStars = dayHours.flatMap((h, i) => {
+          if (h.isDay || h.c > 2 || h.pp >= 10) return [];
+          const yMid = ((i + 0.5) / n) * 100;
+          return [
+            { x: 3,  y: yMid - 0.8, o: 0.70 },
+            { x: 9,  y: yMid + 0.6, o: 0.45 },
+            { x: 6,  y: yMid + 0.2, o: 0.55 },
+          ];
+        }).map(({ x, y, o }) =>
+          `<span class="star-dot" style="left:${x}px;top:${y.toFixed(1)}%;opacity:${o}"></span>`
+        ).join('');
+
         const sumText = isToday
           ? makeSummary(hours)
           : info.l + ' expected. High ' + T(days[S.day].hi) + ', low ' + T(days[S.day].lo) + '.';
@@ -903,25 +910,16 @@ ${hyperlocalMsg ? `<div class="hyperlocal">${hyperlocalMsg}</div>` : ''}
 
 <div class="section-label">Hourly</div>
 <div class="timeline-wrap">
-  <div class="cond-bar" style="background:${gradient}"></div>
+  <div class="cond-bar" style="background:${gradient}">${barStars}</div>
   ${S.discoMode && isToday ? `<div class="disco-wrap" id="discowrap">🪩</div>` : ''}
   ${dayHours
     .map((h) => {
       const hh = new Date(h.t).getHours();
       const isNow = isToday && h.t === nowH;
       const isSleeping = hh < sunriseH || hh > sunsetH;
-      const isClearNight = !h.isDay && h.c <= 2 && h.pp < 10;
-      const starDots = isClearNight
-        ? `<span class="star-dot" style="right:44%;top:22%;width:2px;height:2px;opacity:.65"></span>
-           <span class="star-dot" style="right:27%;top:66%;width:1.5px;height:1.5px;opacity:.45"></span>
-           <span class="star-dot" style="right:57%;top:56%;width:2px;height:2px;opacity:.5"></span>
-           <span class="star-dot" style="right:36%;top:36%;width:1.5px;height:1.5px;opacity:.38"></span>
-           <span class="star-dot" style="right:51%;top:74%;width:1.5px;height:1.5px;opacity:.55"></span>`
-        : '';
       const tl = hh === 0 ? '12am' : hh < 12 ? hh + 'am' : hh === 12 ? '12pm' : hh - 12 + 'pm';
       const w = wmo(h.c);
       return `<div class="hour-row${isNow ? ' now' : ''}${isSleeping && !isNow ? ' dim' : ''}">
-      ${starDots}
       <span class="h-time">${isNow ? '▶ Now' : tl}</span>
       <span class="h-cond">${w.e} ${w.l}</span>
       <span class="h-precip${h.pp < 5 ? ' dry' : ''}">${h.pp > 4 ? h.pp + '%' : '—'}</span>

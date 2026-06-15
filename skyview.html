@@ -174,7 +174,7 @@
       }
       .sky-main {
         position: fixed;
-        top: calc(var(--header-h, 110px) + 32px);
+        bottom: calc(var(--panel-h, 150px) + 28px);
         left: 0;
         right: 0;
         text-align: center;
@@ -182,23 +182,46 @@
         pointer-events: none;
       }
       .sky-temp {
-        font-size: 88px;
-        font-weight: 200;
-        letter-spacing: -5px;
-        line-height: 1;
-        text-shadow: 0 2px 30px rgba(0, 0, 0, 0.5);
+        line-height: 0.86;
+        text-shadow: 0 4px 48px rgba(0, 0, 0, 0.45);
       }
-      .sky-cond {
-        font-size: 20px;
-        font-weight: 500;
-        margin-top: 6px;
-        color: rgba(255, 255, 255, 0.88);
-        text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6);
+      .sky-num {
+        font-size: clamp(86px, 23vw, 148px);
+        font-weight: 100;
+        letter-spacing: -5px;
+      }
+      .sky-unit {
+        font-size: clamp(28px, 6.5vw, 46px);
+        font-weight: 300;
+        letter-spacing: 0;
+        vertical-align: 38%;
+        margin-left: 1px;
+      }
+      .sky-cond-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .sky-cond-line {
+        flex: 0 0 28px;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.28);
+      }
+      .sky-cond-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 3.5px;
+        color: rgba(255, 255, 255, 0.62);
+        text-shadow: 0 1px 10px rgba(0, 0, 0, 0.6);
+        text-transform: uppercase;
       }
       .sky-hi-lo {
-        font-size: 15px;
-        color: rgba(255, 255, 255, 0.52);
-        margin-top: 5px;
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.38);
+        margin-top: 10px;
+        letter-spacing: 0.8px;
         text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
       }
       .sky-panel {
@@ -1045,11 +1068,20 @@
               ${hr.precip >= 20 ? `<div class="hi-pp">💧${hr.precip}%</div>` : ''}
             </div>`).join('');
 
+          const tempNum = S.unit === 'C' ? Math.round(cur.temperature) : Math.round(cur.temperature * 9 / 5 + 32);
+          const tempUnit = S.unit === 'C' ? '°C' : '°F';
+
           return `<canvas id="sky-canvas"></canvas>
 <div class="sky-main">
-  <div class="sky-temp">${T(cur.temperature)}</div>
-  <div class="sky-cond">${w.e} ${w.l}</div>
-  <div class="sky-hi-lo">H: ${T(hiT)} · L: ${T(loT)}</div>
+  <div class="sky-temp">
+    <span class="sky-num">${tempNum}</span><span class="sky-unit">${tempUnit}</span>
+  </div>
+  <div class="sky-cond-wrap">
+    <span class="sky-cond-line"></span>
+    <span class="sky-cond-label">${w.l}</span>
+    <span class="sky-cond-line"></span>
+  </div>
+  <div class="sky-hi-lo">H: ${T(hiT)} &nbsp;·&nbsp; L: ${T(loT)}</div>
 </div>
 <div class="sky-panel">
   <div class="sky-stats">
@@ -1102,9 +1134,9 @@
 
         requestAnimationFrame(() => {
           const headerEl = document.querySelector('.header');
-          if (headerEl) {
-            document.documentElement.style.setProperty('--header-h', headerEl.offsetHeight + 'px');
-          }
+          if (headerEl) document.documentElement.style.setProperty('--header-h', headerEl.offsetHeight + 'px');
+          const panelEl = document.querySelector('.sky-panel');
+          if (panelEl) document.documentElement.style.setProperty('--panel-h', panelEl.offsetHeight + 'px');
           if (S.phase !== 'ready') return;
           if (S.view === 'sky') {
             const c = document.getElementById('sky-canvas');

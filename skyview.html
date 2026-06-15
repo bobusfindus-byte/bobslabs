@@ -172,9 +172,9 @@
         z-index: 0;
         display: block;
       }
-      .sky-overlay {
+      .sky-main {
         position: fixed;
-        bottom: calc(var(--safe-bottom) + 28px);
+        top: calc(var(--header-h, 110px) + 32px);
         left: 0;
         right: 0;
         text-align: center;
@@ -182,26 +182,47 @@
         pointer-events: none;
       }
       .sky-temp {
-        font-size: 80px;
+        font-size: 88px;
         font-weight: 200;
-        letter-spacing: -4px;
+        letter-spacing: -5px;
         line-height: 1;
         text-shadow: 0 2px 30px rgba(0, 0, 0, 0.5);
       }
       .sky-cond {
-        font-size: 19px;
+        font-size: 20px;
         font-weight: 500;
         margin-top: 6px;
         color: rgba(255, 255, 255, 0.88);
         text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6);
       }
-      .sky-detail {
-        font-size: 13px;
-        color: rgba(255, 255, 255, 0.5);
-        margin-top: 6px;
-        letter-spacing: 0.3px;
-        text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+      .sky-hi-lo {
+        font-size: 15px;
+        color: rgba(255, 255, 255, 0.52);
+        margin-top: 5px;
+        text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
       }
+      .sky-panel {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 5;
+        background: rgba(8, 12, 24, 0.72);
+        backdrop-filter: blur(22px);
+        -webkit-backdrop-filter: blur(22px);
+        border-top: 1px solid rgba(255, 255, 255, 0.10);
+        padding: 14px 16px calc(var(--safe-bottom) + 18px);
+      }
+      .sky-stats {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--text-dim);
+        margin-bottom: 12px;
+      }
+      .sky-stats-sep { opacity: 0.35; }
 
       /* ── Clock view ── */
       .clock-wrap {
@@ -978,11 +999,44 @@
         const pp = ci >= 0 ? hourly.precipitation_probability[ci] ?? 0 : 0;
 
         if (S.view === 'sky') {
+          // Today hi/lo from hourly data
+          const todayTemps = hourly.time
+            .map((t, i) => t.slice(0, 10) === todayStr ? hourly.temperature_2m[i] : null)
+            .filter(v => v !== null);
+          const hiT = todayTemps.length ? Math.max(...todayTemps) : cur.temperature;
+          const loT = todayTemps.length ? Math.min(...todayTemps) : cur.temperature;
+
+          // Next 8 hours for the strip
+          const skyNextHours = [];
+          hourly.time.forEach((t, i) => {
+            if (t.slice(0, 10) === todayStr) {
+              const hh = new Date(t).getHours();
+              if (hh >= nowH && skyNextHours.length < 8) {
+                skyNextHours.push({ h: hh, temp: hourly.temperature_2m[i], code: hourly.weathercode[i], precip: hourly.precipitation_probability[i] || 0 });
+              }
+            }
+          });
+          const skyHourHTML = skyNextHours.map((hr, idx) => `
+            <div class="hi-item${idx === 0 ? ' hi-now' : ''}">
+              <div class="hi-time">${idx === 0 ? 'Now' : fmtHour(hr.h)}</div>
+              <div class="hi-icon">${wmo(hr.code).e}</div>
+              <div class="hi-temp">${T(hr.temp)}</div>
+              ${hr.precip >= 20 ? `<div class="hi-pp">💧${hr.precip}%</div>` : ''}
+            </div>`).join('');
+
           return `<canvas id="sky-canvas"></canvas>
-<div class="sky-overlay">
+<div class="sky-main">
   <div class="sky-temp">${T(cur.temperature)}</div>
   <div class="sky-cond">${w.e} ${w.l}</div>
-  <div class="sky-detail">💧 ${pp}% · 💨 ${Math.round(cur.windspeed)} km/h</div>
+  <div class="sky-hi-lo">H: ${T(hiT)} · L: ${T(loT)}</div>
+</div>
+<div class="sky-panel">
+  <div class="sky-stats">
+    <span>💧 ${pp}%</span>
+    <span class="sky-stats-sep">·</span>
+    <span>💨 ${Math.round(cur.windspeed)} km/h</span>
+  </div>
+  <div class="hour-strip" style="max-width:none">${skyHourHTML}</div>
 </div>`;
         }
 

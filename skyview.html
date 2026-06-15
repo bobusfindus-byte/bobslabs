@@ -206,23 +206,65 @@
       /* ── Clock view ── */
       .clock-wrap {
         position: fixed;
-        inset: 0;
+        top: var(--header-h, 110px);
+        bottom: 0;
+        left: 0;
+        right: 0;
         z-index: 5;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        padding-bottom: calc(var(--safe-bottom) + 12px);
       }
       #clock-canvas {
         display: block;
       }
       .clock-summary {
-        margin-top: 20px;
-        font-size: 14px;
+        margin-top: 14px;
+        font-size: 13px;
         color: var(--text-dim);
         text-align: center;
         letter-spacing: 0.2px;
       }
+
+      /* ── Hourly strip ── */
+      .hour-strip {
+        display: flex;
+        width: 100%;
+        max-width: 520px;
+        overflow-x: auto;
+        scrollbar-width: none;
+        margin-top: 14px;
+        border-top: 1px solid var(--border);
+        padding-top: 10px;
+      }
+      .hour-strip::-webkit-scrollbar { display: none; }
+      .hi-item {
+        flex: 1;
+        min-width: 54px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 4px 8px;
+        border-radius: 8px;
+      }
+      .hi-item.hi-now {
+        background: rgba(255,255,255,0.08);
+      }
+      .hi-time {
+        font-size: 11px;
+        color: var(--text-dim);
+        font-weight: 500;
+      }
+      .hi-item.hi-now .hi-time {
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .hi-icon { font-size: 17px; line-height: 1.2; }
+      .hi-temp { font-size: 13px; font-weight: 600; }
+      .hi-pp { font-size: 10px; color: #93c5fd; }
 
       /* ── Hour detail tooltip ── */
       .hour-tip {
@@ -422,7 +464,8 @@
       function drawClock(canvas) {
         const dpr = window.devicePixelRatio || 1;
         const headerH = document.querySelector('.header')?.offsetHeight || 110;
-        const avail = Math.min(window.innerWidth * 0.9, window.innerHeight - headerH - 80);
+        const stripH = 100; // hour strip + clock-summary
+        const avail = Math.min(window.innerWidth * 0.9, window.innerHeight - headerH - stripH - 16);
         const logW = Math.min(avail, 520);
         canvas.style.width = logW + 'px';
         canvas.style.height = logW + 'px';
@@ -943,9 +986,33 @@
 </div>`;
         }
 
+        // Next 8 hours from current hour
+        const nextHours = [];
+        hourly.time.forEach((t, i) => {
+          if (t.slice(0, 10) === todayStr) {
+            const hh = new Date(t).getHours();
+            if (hh >= nowH && nextHours.length < 8) {
+              nextHours.push({
+                h: hh,
+                temp: hourly.temperature_2m[i],
+                code: hourly.weathercode[i],
+                precip: hourly.precipitation_probability[i] || 0,
+              });
+            }
+          }
+        });
+        const hourStripHTML = nextHours.map((hr, idx) => `
+          <div class="hi-item${idx === 0 ? ' hi-now' : ''}">
+            <div class="hi-time">${idx === 0 ? 'Now' : fmtHour(hr.h)}</div>
+            <div class="hi-icon">${wmo(hr.code).e}</div>
+            <div class="hi-temp">${T(hr.temp)}</div>
+            ${hr.precip >= 20 ? `<div class="hi-pp">💧${hr.precip}%</div>` : ''}
+          </div>`).join('');
+
         return `<div class="clock-wrap">
   <canvas id="clock-canvas"></canvas>
-  <div class="clock-summary">${w.e} ${w.l} · 💧 ${pp}% · 💨 ${Math.round(cur.windspeed)} km/h</div>
+  <div class="clock-summary">💧 ${pp}% · 💨 ${Math.round(cur.windspeed)} km/h</div>
+  <div class="hour-strip">${hourStripHTML}</div>
 </div>`;
       }
 
@@ -959,6 +1026,10 @@
         document.getElementById('root').innerHTML = header() + body();
 
         requestAnimationFrame(() => {
+          const headerEl = document.querySelector('.header');
+          if (headerEl) {
+            document.documentElement.style.setProperty('--header-h', headerEl.offsetHeight + 'px');
+          }
           if (S.phase !== 'ready') return;
           if (S.view === 'sky') {
             const c = document.getElementById('sky-canvas');

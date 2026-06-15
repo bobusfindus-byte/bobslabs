@@ -216,25 +216,12 @@
       #clock-canvas {
         display: block;
       }
-      .clock-legend {
-        display: flex;
-        gap: 12px;
-        margin-top: 18px;
-        flex-wrap: wrap;
-        justify-content: center;
-      }
-      .legend-item {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        font-size: 11px;
+      .clock-summary {
+        margin-top: 20px;
+        font-size: 14px;
         color: var(--text-dim);
-      }
-      .legend-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        flex-shrink: 0;
+        text-align: center;
+        letter-spacing: 0.2px;
       }
 
       /* ── Hour detail tooltip ── */
@@ -269,7 +256,7 @@
         unit: 'C',
         locName: '',
         weather: null,
-        view: 'sky',
+        view: 'clock',
         lat: null,
         lon: null,
         lastUpdated: null,
@@ -419,10 +406,10 @@
       const CAT_COLOR = {
         clear: '#ffd93d',
         partly: '#a8c4e0',
-        cloud: '#4b5563',
+        cloud: '#6b7280',   // was #4b5563 — too dark against the bg
         drizzle: '#93c5fd',
         rain: '#3b82f6',
-        snow: '#dbeafe',
+        snow: '#bfdbfe',    // was #dbeafe — too pale
         storm: '#7c3aed',
       };
       function catColor(cat) {
@@ -482,7 +469,7 @@
         // Background disc
         ctx.beginPath();
         ctx.arc(cx, cy, outerR + precipMaxW + L * 0.01, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.03)';
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
         ctx.fill();
 
         // Segments
@@ -499,7 +486,7 @@
           ctx.arc(cx, cy, innerR, ea, sa, true);
           ctx.closePath();
           ctx.fillStyle = catColor(seg.cat);
-          ctx.globalAlpha = 0.82;
+          ctx.globalAlpha = 0.92;
           ctx.fill();
 
           // Temperature heat tint overlay
@@ -534,8 +521,8 @@
           ctx.arc(cx, cy, outerR + 1, hSeg.sa, hSeg.ea);
           ctx.arc(cx, cy, innerR - 1, hSeg.ea, hSeg.sa, true);
           ctx.closePath();
-          ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+          ctx.lineWidth = 2.5;
           ctx.stroke();
         }
 
@@ -900,26 +887,26 @@
         const cur = S.weather.current_weather;
         const w = wmo(cur.weathercode);
 
+        const hourly = S.weather.hourly;
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const nowH = new Date().getHours();
+        const ci = hourly.time.findIndex(
+          (t) => t.slice(0, 10) === todayStr && new Date(t).getHours() === nowH,
+        );
+        const pp = ci >= 0 ? hourly.precipitation_probability[ci] ?? 0 : 0;
+
         if (S.view === 'sky') {
           return `<canvas id="sky-canvas"></canvas>
 <div class="sky-overlay">
   <div class="sky-temp">${T(cur.temperature)}</div>
   <div class="sky-cond">${w.e} ${w.l}</div>
-  <div class="sky-detail">Wind ${Math.round(cur.windspeed)} km/h</div>
+  <div class="sky-detail">💧 ${pp}% · 💨 ${Math.round(cur.windspeed)} km/h</div>
 </div>`;
         }
 
         return `<div class="clock-wrap">
   <canvas id="clock-canvas"></canvas>
-  <div class="clock-legend">
-    ${Object.entries(CAT_COLOR)
-      .map(
-        ([cat, col]) =>
-          `<div class="legend-item"><div class="legend-dot" style="background:${col}"></div>${cat}</div>`,
-      )
-      .join('')}
-    <div class="legend-item"><div class="legend-dot" style="background:#93c5fd"></div>precip %</div>
-  </div>
+  <div class="clock-summary">${w.e} ${w.l} · 💧 ${pp}% · 💨 ${Math.round(cur.windspeed)} km/h</div>
 </div>`;
       }
 

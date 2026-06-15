@@ -172,9 +172,9 @@
         z-index: 0;
         display: block;
       }
-      .sky-overlay {
+      .sky-main {
         position: fixed;
-        bottom: calc(var(--safe-bottom) + 28px);
+        top: calc(var(--header-h, 110px) + 32px);
         left: 0;
         right: 0;
         text-align: center;
@@ -182,60 +182,110 @@
         pointer-events: none;
       }
       .sky-temp {
-        font-size: 80px;
+        font-size: 88px;
         font-weight: 200;
-        letter-spacing: -4px;
+        letter-spacing: -5px;
         line-height: 1;
         text-shadow: 0 2px 30px rgba(0, 0, 0, 0.5);
       }
       .sky-cond {
-        font-size: 19px;
+        font-size: 20px;
         font-weight: 500;
         margin-top: 6px;
         color: rgba(255, 255, 255, 0.88);
         text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6);
       }
-      .sky-detail {
-        font-size: 13px;
-        color: rgba(255, 255, 255, 0.5);
-        margin-top: 6px;
-        letter-spacing: 0.3px;
-        text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+      .sky-hi-lo {
+        font-size: 15px;
+        color: rgba(255, 255, 255, 0.52);
+        margin-top: 5px;
+        text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
       }
+      .sky-panel {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 5;
+        background: rgba(8, 12, 24, 0.72);
+        backdrop-filter: blur(22px);
+        -webkit-backdrop-filter: blur(22px);
+        border-top: 1px solid rgba(255, 255, 255, 0.10);
+        padding: 14px 16px calc(var(--safe-bottom) + 18px);
+      }
+      .sky-stats {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--text-dim);
+        margin-bottom: 12px;
+      }
+      .sky-stats-sep { opacity: 0.35; }
 
       /* ── Clock view ── */
       .clock-wrap {
         position: fixed;
-        inset: 0;
+        top: var(--header-h, 110px);
+        bottom: 0;
+        left: 0;
+        right: 0;
         z-index: 5;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        padding-bottom: calc(var(--safe-bottom) + 12px);
       }
       #clock-canvas {
         display: block;
       }
-      .clock-legend {
-        display: flex;
-        gap: 12px;
-        margin-top: 18px;
-        flex-wrap: wrap;
-        justify-content: center;
+      .clock-summary {
+        margin-top: 14px;
+        font-size: 13px;
+        color: var(--text-dim);
+        text-align: center;
+        letter-spacing: 0.2px;
       }
-      .legend-item {
+
+      /* ── Hourly strip ── */
+      .hour-strip {
         display: flex;
+        width: 100%;
+        max-width: 520px;
+        overflow-x: auto;
+        scrollbar-width: none;
+        margin-top: 14px;
+        border-top: 1px solid var(--border);
+        padding-top: 10px;
+      }
+      .hour-strip::-webkit-scrollbar { display: none; }
+      .hi-item {
+        flex: 1;
+        min-width: 54px;
+        display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: 5px;
+        gap: 4px;
+        padding: 6px 4px 8px;
+        border-radius: 8px;
+      }
+      .hi-item.hi-now {
+        background: rgba(255,255,255,0.08);
+      }
+      .hi-time {
         font-size: 11px;
         color: var(--text-dim);
+        font-weight: 500;
       }
-      .legend-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        flex-shrink: 0;
+      .hi-item.hi-now .hi-time {
+        color: var(--accent);
+        font-weight: 700;
       }
+      .hi-icon { font-size: 17px; line-height: 1.2; }
+      .hi-temp { font-size: 13px; font-weight: 600; }
+      .hi-pp { font-size: 10px; color: #93c5fd; }
 
       /* ── Hour detail tooltip ── */
       .hour-tip {
@@ -269,7 +319,7 @@
         unit: 'C',
         locName: '',
         weather: null,
-        view: 'sky',
+        view: 'clock',
         lat: null,
         lon: null,
         lastUpdated: null,
@@ -419,10 +469,10 @@
       const CAT_COLOR = {
         clear: '#ffd93d',
         partly: '#a8c4e0',
-        cloud: '#4b5563',
+        cloud: '#6b7280',   // was #4b5563 — too dark against the bg
         drizzle: '#93c5fd',
         rain: '#3b82f6',
-        snow: '#dbeafe',
+        snow: '#bfdbfe',    // was #dbeafe — too pale
         storm: '#7c3aed',
       };
       function catColor(cat) {
@@ -435,7 +485,8 @@
       function drawClock(canvas) {
         const dpr = window.devicePixelRatio || 1;
         const headerH = document.querySelector('.header')?.offsetHeight || 110;
-        const avail = Math.min(window.innerWidth * 0.9, window.innerHeight - headerH - 80);
+        const stripH = 100; // hour strip + clock-summary
+        const avail = Math.min(window.innerWidth * 0.9, window.innerHeight - headerH - stripH - 16);
         const logW = Math.min(avail, 520);
         canvas.style.width = logW + 'px';
         canvas.style.height = logW + 'px';
@@ -482,7 +533,7 @@
         // Background disc
         ctx.beginPath();
         ctx.arc(cx, cy, outerR + precipMaxW + L * 0.01, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.03)';
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
         ctx.fill();
 
         // Segments
@@ -499,7 +550,7 @@
           ctx.arc(cx, cy, innerR, ea, sa, true);
           ctx.closePath();
           ctx.fillStyle = catColor(seg.cat);
-          ctx.globalAlpha = 0.82;
+          ctx.globalAlpha = 0.92;
           ctx.fill();
 
           // Temperature heat tint overlay
@@ -534,8 +585,8 @@
           ctx.arc(cx, cy, outerR + 1, hSeg.sa, hSeg.ea);
           ctx.arc(cx, cy, innerR - 1, hSeg.ea, hSeg.sa, true);
           ctx.closePath();
-          ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+          ctx.lineWidth = 2.5;
           ctx.stroke();
         }
 
@@ -647,6 +698,7 @@
           w: W * (0.2 + Math.random() * 0.3),
           hh: H * (0.055 + Math.random() * 0.04),
           spd: 0.12 + Math.random() * 0.22,
+          dark: cat === 'storm' || cat === 'rain',
           alpha:
             {
               clear: 0.07,
@@ -682,6 +734,7 @@
 
         const h = new Date().getHours();
         const nightClear = (h < 6 || h >= 20) && (cat === 'clear' || cat === 'partly');
+        const starPalette = ['#ffffff', '#ffffff', '#ffffff', '#ccd8ff', '#ffe8dd'];
         sky.stars = nightClear
           ? Array.from({ length: cat === 'clear' ? 200 : 70 }, () => ({
               x: Math.random() * W,
@@ -689,27 +742,35 @@
               r: 0.5 + Math.random() * 1.5,
               phase: Math.random() * Math.PI * 2,
               spd: 0.015 + Math.random() * 0.03,
+              col: starPalette[Math.floor(Math.random() * starPalette.length)],
             }))
           : [];
 
         sky.ready = true;
       }
 
-      function drawCloudShape(ctx, x, y, w, hh, alpha) {
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = '#dde8f5';
+      // Soft volumetric cloud using radial gradients per puff
+      function drawSoftCloud(ctx, x, y, w, hh, alpha, dark) {
+        const [cr, cg, cb] = dark ? [52, 58, 72] : [218, 228, 242];
         const puffs = [
-          [0, 0, w * 0.5, hh],
-          [-(w * 0.27), hh * 0.15, w * 0.37, hh * 0.82],
-          [w * 0.27, hh * 0.2, w * 0.33, hh * 0.78],
-          [-(w * 0.12), -(hh * 0.08), w * 0.3, hh * 0.88],
+          [0,        0,        w * 0.50, hh],
+          [-w*0.27,  hh*0.15,  w * 0.38, hh * 0.82],
+          [ w*0.27,  hh*0.20,  w * 0.34, hh * 0.78],
+          [-w*0.12, -hh*0.08,  w * 0.30, hh * 0.88],
+          [ w*0.04, -hh*0.15,  w * 0.24, hh * 0.70],
         ];
         puffs.forEach(([dx, dy, rw, rh]) => {
+          const px = x + dx, py = y + dy;
+          const rad = Math.max(rw, rh) * 0.62;
+          const g = ctx.createRadialGradient(px, py - rh * 0.08, rad * 0.1, px, py, rad);
+          g.addColorStop(0,    `rgba(${cr},${cg},${cb},${alpha.toFixed(2)})`);
+          g.addColorStop(0.55, `rgba(${Math.round(cr*0.88)},${Math.round(cg*0.88)},${Math.round(cb*0.90)},${(alpha*0.55).toFixed(2)})`);
+          g.addColorStop(1,    `rgba(${Math.round(cr*0.75)},${Math.round(cg*0.75)},${Math.round(cb*0.80)},0)`);
+          ctx.fillStyle = g;
           ctx.beginPath();
-          ctx.ellipse(x + dx, y + dy, rw / 2, rh / 2, 0, 0, Math.PI * 2);
+          ctx.ellipse(px, py, rw / 2, rh / 2, 0, 0, Math.PI * 2);
           ctx.fill();
         });
-        ctx.globalAlpha = 1;
       }
 
       function animateSky(canvas) {
@@ -752,78 +813,107 @@
           const isDawn = h >= 5 && h < 7;
           const isDusk = h >= 17 && h < 20;
 
-          // Stars
+          // Stars (with subtle colour variation)
           sky.stars.forEach((s) => {
             s.phase += s.spd;
             const a = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(s.phase));
             ctx.globalAlpha = a;
-            ctx.fillStyle = '#fff';
+            ctx.fillStyle = s.col || '#fff';
             ctx.beginPath();
             ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
             ctx.fill();
             ctx.globalAlpha = 1;
           });
 
-          // Moon (night)
+          // Moon with soft halo
           if (isNight) {
-            const mx = W * 0.76,
-              my = H * 0.16;
-            ctx.globalAlpha = 0.92;
-            ctx.fillStyle = '#ccd8f0';
+            const mx = W * 0.76, my = H * 0.16;
+            const moonHalo = ctx.createRadialGradient(mx, my, 10, mx, my, 90);
+            moonHalo.addColorStop(0, 'rgba(180,200,240,0.20)');
+            moonHalo.addColorStop(1, 'rgba(180,200,240,0)');
+            ctx.fillStyle = moonHalo;
+            ctx.beginPath();
+            ctx.arc(mx, my, 90, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 0.94;
+            ctx.fillStyle = '#d0ddf2';
             ctx.beginPath();
             ctx.arc(mx, my, 30, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = top; // crescent cutout using sky colour
+            ctx.fillStyle = top;
             ctx.beginPath();
             ctx.arc(mx + 18, my - 10, 26, 0, Math.PI * 2);
             ctx.fill();
             ctx.globalAlpha = 1;
           }
 
-          // Sun glow (day / dawn / dusk)
+          // Sun — smooth solar arc, layered glow, visible disc
           if (!isNight) {
-            const sunX = isDawn || isDusk ? W * 0.28 : W * 0.72;
-            const sunY =
-              isDawn || isDusk ? H * 0.74 : H * (0.1 + 0.12 * Math.sin(((h - 6) / 12) * Math.PI));
-            const g2 = ctx.createRadialGradient(
-              sunX,
-              sunY,
-              0,
-              sunX,
-              sunY,
-              isDawn || isDusk ? 100 : 60,
-            );
-            g2.addColorStop(0, 'rgba(255,228,100,0.95)');
-            g2.addColorStop(0.35, 'rgba(255,160,50,0.55)');
-            g2.addColorStop(1, 'rgba(255,100,0,0)');
-            if (cat === 'clear' || cat === 'partly' || isDawn || isDusk) {
-              ctx.fillStyle = g2;
+            const now2 = new Date();
+            const dayFrac = Math.max(0, Math.min(1, (h + now2.getMinutes() / 60 - 5.5) / 14));
+            const sunX = W * (0.08 + dayFrac * 0.84);
+            const elev  = Math.sin(dayFrac * Math.PI);
+            const sunY  = H * (0.88 - elev * 0.76);
+            const isLow = elev < 0.22;
+            const glowR = isLow ? 180 : 100;
+
+            // Outer atmospheric wash
+            const atmo = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, glowR * 2.4);
+            atmo.addColorStop(0, isLow ? 'rgba(255,120,25,0.30)' : 'rgba(255,215,90,0.14)');
+            atmo.addColorStop(1, 'rgba(255,70,0,0)');
+            ctx.fillStyle = atmo;
+            ctx.fillRect(0, 0, W, H);
+
+            if (cat === 'clear' || cat === 'partly' || isLow) {
+              // Inner corona
+              const corona = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, glowR);
+              corona.addColorStop(0,   isLow ? 'rgba(255,195,55,0.90)' : 'rgba(255,238,150,0.75)');
+              corona.addColorStop(0.4, isLow ? 'rgba(255,110,15,0.42)' : 'rgba(255,205,70,0.28)');
+              corona.addColorStop(1,   'rgba(255,70,0,0)');
+              ctx.fillStyle = corona;
               ctx.fillRect(0, 0, W, H);
+
+              // Sun disc (fades in from horizon)
+              const discAlpha = Math.min(1, elev * 5 + 0.25);
+              ctx.globalAlpha = discAlpha;
+              ctx.beginPath();
+              ctx.arc(sunX, sunY, isLow ? 22 : 16, 0, Math.PI * 2);
+              ctx.fillStyle = isLow ? '#ffe5a0' : '#fff8e8';
+              ctx.fill();
+              ctx.globalAlpha = 1;
             }
           }
 
-          // Clouds
+          // Clouds — soft volumetric
           sky.clouds.forEach((c) => {
             c.x -= c.spd;
             if (c.x + c.w < -60) c.x = W + 60;
-            drawCloudShape(ctx, c.x, c.y, c.w, c.hh, c.alpha);
+            drawSoftCloud(ctx, c.x, c.y, c.w, c.hh, c.alpha, c.dark);
           });
 
-          // Rain
+          // Atmospheric horizon haze
+          const hazeGrad = ctx.createLinearGradient(0, H * 0.58, 0, H);
+          hazeGrad.addColorStop(0, 'rgba(0,0,0,0)');
+          hazeGrad.addColorStop(1, isNight ? 'rgba(0,4,20,0.42)' : 'rgba(130,155,195,0.20)');
+          ctx.fillStyle = hazeGrad;
+          ctx.fillRect(0, 0, W, H);
+
+          // Rain — angle driven by actual wind direction
+          const windDir = (cur.winddirection ?? 270);
+          const rainDx = Math.cos(((windDir - 90) * Math.PI) / 180) * 0.3;
           sky.rain.forEach((r) => {
             r.y += r.spd;
-            r.x -= r.spd * 0.22;
-            if (r.y > H) {
-              r.y = -r.len;
-              r.x = Math.random() * W;
-            }
+            r.x += rainDx * r.spd;
+            if (r.y > H) { r.y = -r.len; r.x = Math.random() * W; }
+            if (r.x > W + 20) r.x -= W + 40;
+            if (r.x < -20)    r.x += W + 40;
             ctx.globalAlpha = r.alpha;
-            ctx.strokeStyle = '#93c5fd';
-            ctx.lineWidth = 1;
-            ctx.lineCap = 'butt';
+            ctx.strokeStyle = cat === 'drizzle' ? 'rgba(180,210,255,0.65)' : '#93c5fd';
+            ctx.lineWidth = cat === 'drizzle' ? 0.8 : 1.2;
+            ctx.lineCap = 'round';
             ctx.beginPath();
             ctx.moveTo(r.x, r.y);
-            ctx.lineTo(r.x - r.len * 0.22, r.y + r.len);
+            ctx.lineTo(r.x + rainDx * r.len, r.y + r.len);
             ctx.stroke();
             ctx.globalAlpha = 1;
           });
@@ -900,26 +990,83 @@
         const cur = S.weather.current_weather;
         const w = wmo(cur.weathercode);
 
+        const hourly = S.weather.hourly;
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const nowH = new Date().getHours();
+        const ci = hourly.time.findIndex(
+          (t) => t.slice(0, 10) === todayStr && new Date(t).getHours() === nowH,
+        );
+        const pp = ci >= 0 ? hourly.precipitation_probability[ci] ?? 0 : 0;
+
         if (S.view === 'sky') {
+          // Today hi/lo from hourly data
+          const todayTemps = hourly.time
+            .map((t, i) => t.slice(0, 10) === todayStr ? hourly.temperature_2m[i] : null)
+            .filter(v => v !== null);
+          const hiT = todayTemps.length ? Math.max(...todayTemps) : cur.temperature;
+          const loT = todayTemps.length ? Math.min(...todayTemps) : cur.temperature;
+
+          // Next 8 hours for the strip
+          const skyNextHours = [];
+          hourly.time.forEach((t, i) => {
+            if (t.slice(0, 10) === todayStr) {
+              const hh = new Date(t).getHours();
+              if (hh >= nowH && skyNextHours.length < 8) {
+                skyNextHours.push({ h: hh, temp: hourly.temperature_2m[i], code: hourly.weathercode[i], precip: hourly.precipitation_probability[i] || 0 });
+              }
+            }
+          });
+          const skyHourHTML = skyNextHours.map((hr, idx) => `
+            <div class="hi-item${idx === 0 ? ' hi-now' : ''}">
+              <div class="hi-time">${idx === 0 ? 'Now' : fmtHour(hr.h)}</div>
+              <div class="hi-icon">${wmo(hr.code).e}</div>
+              <div class="hi-temp">${T(hr.temp)}</div>
+              ${hr.precip >= 20 ? `<div class="hi-pp">💧${hr.precip}%</div>` : ''}
+            </div>`).join('');
+
           return `<canvas id="sky-canvas"></canvas>
-<div class="sky-overlay">
+<div class="sky-main">
   <div class="sky-temp">${T(cur.temperature)}</div>
   <div class="sky-cond">${w.e} ${w.l}</div>
-  <div class="sky-detail">Wind ${Math.round(cur.windspeed)} km/h</div>
+  <div class="sky-hi-lo">H: ${T(hiT)} · L: ${T(loT)}</div>
+</div>
+<div class="sky-panel">
+  <div class="sky-stats">
+    <span>💧 ${pp}%</span>
+    <span class="sky-stats-sep">·</span>
+    <span>💨 ${Math.round(cur.windspeed)} km/h</span>
+  </div>
+  <div class="hour-strip" style="max-width:none">${skyHourHTML}</div>
 </div>`;
         }
 
+        // Next 8 hours from current hour
+        const nextHours = [];
+        hourly.time.forEach((t, i) => {
+          if (t.slice(0, 10) === todayStr) {
+            const hh = new Date(t).getHours();
+            if (hh >= nowH && nextHours.length < 8) {
+              nextHours.push({
+                h: hh,
+                temp: hourly.temperature_2m[i],
+                code: hourly.weathercode[i],
+                precip: hourly.precipitation_probability[i] || 0,
+              });
+            }
+          }
+        });
+        const hourStripHTML = nextHours.map((hr, idx) => `
+          <div class="hi-item${idx === 0 ? ' hi-now' : ''}">
+            <div class="hi-time">${idx === 0 ? 'Now' : fmtHour(hr.h)}</div>
+            <div class="hi-icon">${wmo(hr.code).e}</div>
+            <div class="hi-temp">${T(hr.temp)}</div>
+            ${hr.precip >= 20 ? `<div class="hi-pp">💧${hr.precip}%</div>` : ''}
+          </div>`).join('');
+
         return `<div class="clock-wrap">
   <canvas id="clock-canvas"></canvas>
-  <div class="clock-legend">
-    ${Object.entries(CAT_COLOR)
-      .map(
-        ([cat, col]) =>
-          `<div class="legend-item"><div class="legend-dot" style="background:${col}"></div>${cat}</div>`,
-      )
-      .join('')}
-    <div class="legend-item"><div class="legend-dot" style="background:#93c5fd"></div>precip %</div>
-  </div>
+  <div class="clock-summary">💧 ${pp}% · 💨 ${Math.round(cur.windspeed)} km/h</div>
+  <div class="hour-strip">${hourStripHTML}</div>
 </div>`;
       }
 
@@ -933,6 +1080,10 @@
         document.getElementById('root').innerHTML = header() + body();
 
         requestAnimationFrame(() => {
+          const headerEl = document.querySelector('.header');
+          if (headerEl) {
+            document.documentElement.style.setProperty('--header-h', headerEl.offsetHeight + 'px');
+          }
           if (S.phase !== 'ready') return;
           if (S.view === 'sky') {
             const c = document.getElementById('sky-canvas');

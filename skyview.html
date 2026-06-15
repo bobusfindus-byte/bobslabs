@@ -605,33 +605,38 @@
           );
         });
 
-        // Clock hand
+        // Current-hour tick — ring-only, never crosses centre text
         const frac = (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
         const ha = frac * Math.PI * 2 - Math.PI / 2;
-        const hl = (outerR + innerR) / 2;
+        const tickInner = innerR + L * 0.008;
+        const tickOuter = outerR - L * 0.004;
         ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + Math.cos(ha) * hl, cy + Math.sin(ha) * hl);
-        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-        ctx.lineWidth = 4;
+        ctx.moveTo(cx + Math.cos(ha) * tickInner, cy + Math.sin(ha) * tickInner);
+        ctx.lineTo(cx + Math.cos(ha) * tickOuter, cy + Math.sin(ha) * tickOuter);
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+        ctx.lineWidth = 5;
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + Math.cos(ha) * hl, cy + Math.sin(ha) * hl);
+        ctx.moveTo(cx + Math.cos(ha) * tickInner, cy + Math.sin(ha) * tickInner);
+        ctx.lineTo(cx + Math.cos(ha) * tickOuter, cy + Math.sin(ha) * tickOuter);
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 3;
         ctx.stroke();
 
-        // Centre: current temp + condition
+        // Centre: emoji · temp · condition label — three stacked lines
+        const w2 = wmo(cur.weathercode);
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = `200 ${L * 0.105}px -apple-system, sans-serif`;
+        ctx.font = `${L * 0.068}px -apple-system, sans-serif`;
         ctx.fillStyle = '#e8edf5';
-        ctx.fillText(T(cur.temperature), cx, cy - L * 0.042);
-        ctx.font = `500 ${L * 0.038}px -apple-system, sans-serif`;
-        ctx.fillStyle = 'rgba(255,255,255,0.55)';
-        ctx.fillText(wmo(cur.weathercode).e + ' ' + wmo(cur.weathercode).l, cx, cy + L * 0.065);
+        ctx.fillText(w2.e, cx, cy - L * 0.105);
+        ctx.font = `200 ${L * 0.115}px -apple-system, sans-serif`;
+        ctx.fillStyle = '#e8edf5';
+        ctx.fillText(T(cur.temperature), cx, cy + L * 0.01);
+        ctx.font = `500 ${L * 0.034}px -apple-system, sans-serif`;
+        ctx.fillStyle = 'rgba(255,255,255,0.50)';
+        ctx.fillText(w2.l, cx, cy + L * 0.115);
 
         // Centre dot
         ctx.beginPath();

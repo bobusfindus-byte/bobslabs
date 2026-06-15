@@ -320,7 +320,7 @@
         justify-content: space-between;
         padding: 20px 16px 12px;
         position: sticky;
-        top: var(--safe-top, 0px);
+        top: var(--hero-sticky-top, 62px);
         z-index: 11;
         background: var(--bg);
         border-bottom: 1px solid var(--border);
@@ -811,7 +811,17 @@
       // ── Render ─────────────────────────────────────────────────────────────────
       function render() {
         document.getElementById('root').innerHTML = html();
-        requestAnimationFrame(positionDisco);
+        requestAnimationFrame(() => {
+          positionDisco();
+          // Pin hero just below the title row (bottom of .top-row, which is always
+          // visible since the header is sticky — so this value is scroll-invariant)
+          const topRow = document.querySelector('.top-row');
+          if (topRow) {
+            document.documentElement.style.setProperty(
+              '--hero-sticky-top', topRow.getBoundingClientRect().bottom + 'px'
+            );
+          }
+        });
       }
 
       function html() {

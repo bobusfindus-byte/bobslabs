@@ -624,19 +624,40 @@
         ctx.lineWidth = 3;
         ctx.stroke();
 
-        // Centre: emoji · temp · condition label — three stacked lines
+        // Centre redesign: scrim + tiny icon + large temp + spaced label
         const w2 = wmo(cur.weathercode);
+
+        // Soft dark scrim so text reads cleanly against segment colours
+        const scrim = ctx.createRadialGradient(cx, cy, 0, cx, cy, innerR * 0.9);
+        scrim.addColorStop(0,   'rgba(0,0,0,0.28)');
+        scrim.addColorStop(0.6, 'rgba(0,0,0,0.14)');
+        scrim.addColorStop(1,   'rgba(0,0,0,0)');
+        ctx.fillStyle = scrim;
+        ctx.beginPath();
+        ctx.arc(cx, cy, innerR * 0.9, 0, Math.PI * 2);
+        ctx.fill();
+
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = `${L * 0.068}px -apple-system, sans-serif`;
-        ctx.fillStyle = '#e8edf5';
-        ctx.fillText(w2.e, cx, cy - L * 0.105);
-        ctx.font = `200 ${L * 0.115}px -apple-system, sans-serif`;
-        ctx.fillStyle = '#e8edf5';
-        ctx.fillText(T(cur.temperature), cx, cy + L * 0.01);
-        ctx.font = `500 ${L * 0.034}px -apple-system, sans-serif`;
-        ctx.fillStyle = 'rgba(255,255,255,0.50)';
-        ctx.fillText(w2.l, cx, cy + L * 0.115);
+
+        // Tiny condition icon at top of disc
+        ctx.font = `${L * 0.042}px -apple-system, sans-serif`;
+        ctx.globalAlpha = 0.70;
+        ctx.fillStyle = '#fff';
+        ctx.fillText(w2.e, cx, cy - L * 0.148);
+        ctx.globalAlpha = 1;
+
+        // Temperature — ultra-light, dominant
+        ctx.font = `100 ${L * 0.138}px -apple-system, sans-serif`;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(T(cur.temperature), cx, cy - L * 0.008);
+
+        // Condition label — small, letter-spaced, very dim
+        ctx.font = `500 ${L * 0.024}px -apple-system, sans-serif`;
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.letterSpacing = `${L * 0.004}px`;
+        ctx.fillText(w2.l.toUpperCase(), cx, cy + L * 0.110);
+        ctx.letterSpacing = '0px';
 
         // Centre dot
         ctx.beginPath();

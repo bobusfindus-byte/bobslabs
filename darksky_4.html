@@ -504,7 +504,7 @@
         font-size: 11px;
       }
 
-      /* Waking hours: dim rows outside 8am–10pm */
+      /* Dim rows outside local sunrise–sunset */
       .hour-row.dim {
         opacity: 0.5;
       }
@@ -661,7 +661,7 @@
           '&longitude=' +
           lon +
           '&hourly=temperature_2m,apparent_temperature,precipitation_probability,weathercode,windspeed_10m,relativehumidity_2m,is_day' +
-          '&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max' +
+          '&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset' +
           '&minutely_15=precipitation,weathercode' +
           '&wind_speed_unit=mph&timezone=auto&forecast_days=7';
 
@@ -693,6 +693,8 @@
           hi: d.daily.temperature_2m_max[i],
           lo: d.daily.temperature_2m_min[i],
           ppMax: d.daily.precipitation_probability_max[i] ?? 0,
+          sunrise: d.daily.sunrise[i],
+          sunset: d.daily.sunset[i],
         }));
         return { hours, days, m15 };
       }
@@ -837,8 +839,12 @@
 
       function weatherHTML() {
         const { hours, days, m15 } = S.weather;
-        const selDate = days[S.day].t; // "YYYY-MM-DD"
+        const selDay = days[S.day];
+        const selDate = selDay.t; // "YYYY-MM-DD"
         const dayHours = hours.filter((h) => h.t.startsWith(selDate));
+        // parseInt("05:42") → 5, parseInt("21:18") → 21 — stops at ':'
+        const sunriseH = selDay.sunrise ? parseInt(selDay.sunrise.split('T')[1]) : 6;
+        const sunsetH = selDay.sunset ? parseInt(selDay.sunset.split('T')[1]) : 21;
 
         const now = new Date();
         const nowH = selDate + 'T' + String(now.getHours()).padStart(2, '0') + ':00';
@@ -896,7 +902,7 @@ ${hyperlocalMsg ? `<div class="hyperlocal">${hyperlocalMsg}</div>` : ''}
     .map((h) => {
       const hh = new Date(h.t).getHours();
       const isNow = isToday && h.t === nowH;
-      const isSleeping = hh < 8 || hh >= 22;
+      const isSleeping = hh < sunriseH || hh > sunsetH;
       const tl = hh === 0 ? '12am' : hh < 12 ? hh + 'am' : hh === 12 ? '12pm' : hh - 12 + 'pm';
       const w = wmo(h.c);
       return `<div class="hour-row${isNow ? ' now' : ''}${isSleeping && !isNow ? ' dim' : ''}">

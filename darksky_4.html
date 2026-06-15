@@ -310,14 +310,14 @@
         }
       }
 
-      /* Hero — sticky above the header so it slides over the search bar on scroll */
+      /* Hero — sticky; covers from screen top so nothing scrolls through above it */
       .hero {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
-        padding: 20px 16px 12px;
+        padding: calc(var(--safe-top) + 20px) 16px 12px;
         position: sticky;
-        top: var(--safe-top, 0px);
+        top: 0;
         z-index: 11;
         background: var(--bg);
         border-bottom: 1px solid var(--border);

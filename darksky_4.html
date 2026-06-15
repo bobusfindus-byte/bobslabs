@@ -393,12 +393,19 @@
       }
 
       .hour-row {
+        position: relative;
         display: grid;
         grid-template-columns: 50px 1fr 40px 46px;
         align-items: center;
         gap: 0 8px;
         padding: 9px 0 9px 20px;
         border-bottom: 1px solid var(--border);
+      }
+      .star-dot {
+        position: absolute;
+        border-radius: 50%;
+        background: #fff;
+        pointer-events: none;
       }
       .hour-row:last-child {
         border-bottom: none;
@@ -504,7 +511,7 @@
         font-size: 11px;
       }
 
-      /* Waking hours: dim rows outside 8am–10pm */
+      /* Dim rows outside local sunrise–sunset */
       .hour-row.dim {
         opacity: 0.5;
       }
@@ -661,7 +668,7 @@
           '&longitude=' +
           lon +
           '&hourly=temperature_2m,apparent_temperature,precipitation_probability,weathercode,windspeed_10m,relativehumidity_2m,is_day' +
-          '&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max' +
+          '&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset' +
           '&minutely_15=precipitation,weathercode' +
           '&wind_speed_unit=mph&timezone=auto&forecast_days=7';
 
@@ -693,6 +700,8 @@
           hi: d.daily.temperature_2m_max[i],
           lo: d.daily.temperature_2m_min[i],
           ppMax: d.daily.precipitation_probability_max[i] ?? 0,
+          sunrise: d.daily.sunrise[i],
+          sunset: d.daily.sunset[i],
         }));
         return { hours, days, m15 };
       }
@@ -837,8 +846,12 @@
 
       function weatherHTML() {
         const { hours, days, m15 } = S.weather;
-        const selDate = days[S.day].t; // "YYYY-MM-DD"
+        const selDay = days[S.day];
+        const selDate = selDay.t; // "YYYY-MM-DD"
         const dayHours = hours.filter((h) => h.t.startsWith(selDate));
+        // parseInt("05:42") → 5, parseInt("21:18") → 21 — stops at ':'
+        const sunriseH = selDay.sunrise ? parseInt(selDay.sunrise.split('T')[1]) : 6;
+        const sunsetH = selDay.sunset ? parseInt(selDay.sunset.split('T')[1]) : 21;
 
         const now = new Date();
         const nowH = selDate + 'T' + String(now.getHours()).padStart(2, '0') + ':00';
@@ -896,10 +909,19 @@ ${hyperlocalMsg ? `<div class="hyperlocal">${hyperlocalMsg}</div>` : ''}
     .map((h) => {
       const hh = new Date(h.t).getHours();
       const isNow = isToday && h.t === nowH;
-      const isSleeping = hh < 8 || hh >= 22;
+      const isSleeping = hh < sunriseH || hh > sunsetH;
+      const isClearNight = !h.isDay && h.c <= 2 && h.pp < 10;
+      const starDots = isClearNight
+        ? `<span class="star-dot" style="right:44%;top:22%;width:2px;height:2px;opacity:.65"></span>
+           <span class="star-dot" style="right:27%;top:66%;width:1.5px;height:1.5px;opacity:.45"></span>
+           <span class="star-dot" style="right:57%;top:56%;width:2px;height:2px;opacity:.5"></span>
+           <span class="star-dot" style="right:36%;top:36%;width:1.5px;height:1.5px;opacity:.38"></span>
+           <span class="star-dot" style="right:51%;top:74%;width:1.5px;height:1.5px;opacity:.55"></span>`
+        : '';
       const tl = hh === 0 ? '12am' : hh < 12 ? hh + 'am' : hh === 12 ? '12pm' : hh - 12 + 'pm';
       const w = wmo(h.c);
       return `<div class="hour-row${isNow ? ' now' : ''}${isSleeping && !isNow ? ' dim' : ''}">
+      ${starDots}
       <span class="h-time">${isNow ? '▶ Now' : tl}</span>
       <span class="h-cond">${w.e} ${w.l}</span>
       <span class="h-precip${h.pp < 5 ? ' dry' : ''}">${h.pp > 4 ? h.pp + '%' : '—'}</span>

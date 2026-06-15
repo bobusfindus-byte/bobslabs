@@ -136,49 +136,6 @@
         gap: 8px;
       }
 
-      /* ── Sticky header transitions ── */
-      .header-expand {
-        overflow: hidden;
-        max-height: 60px;
-        opacity: 1;
-        transition: max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s ease;
-      }
-      .header.compact .header-expand {
-        max-height: 0;
-        opacity: 0;
-        pointer-events: none;
-      }
-      .sticky-weather {
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
-        padding-bottom: 10px;
-        max-height: 0;
-        overflow: hidden;
-        opacity: 0;
-        transition: max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s ease;
-      }
-      .header.compact .sticky-weather {
-        max-height: 56px;
-        opacity: 1;
-      }
-      .sticky-temp {
-        font-size: 28px;
-        font-weight: 200;
-        letter-spacing: -1.5px;
-        line-height: 1;
-      }
-      .sticky-cond {
-        font-size: 13px;
-        font-weight: 500;
-        color: var(--text-dim);
-      }
-      .sticky-feels {
-        font-size: 12px;
-        color: var(--text-dim);
-        margin-left: auto;
-        opacity: 0.7;
-      }
       .search-input {
         flex: 1;
         background: var(--surface2);
@@ -356,12 +313,17 @@
         }
       }
 
-      /* Hero */
+      /* Hero — sticky above the header so it slides over the search bar on scroll */
       .hero {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
         padding: 20px 16px 12px;
+        position: sticky;
+        top: 0;
+        z-index: 11;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
       }
       .hero-temp {
         font-size: 76px;
@@ -846,26 +808,10 @@
         );
       }
 
-      // ── Compact header on scroll ───────────────────────────────────────────────
-      let _compactListener = null;
-      function bindCompactHeader() {
-        if (_compactListener) window.removeEventListener('scroll', _compactListener);
-        _compactListener = () => {
-          const hero = document.querySelector('.hero');
-          const hdr = document.querySelector('.header');
-          if (!hero || !hdr) return;
-          hdr.classList.toggle('compact', hero.getBoundingClientRect().bottom < hdr.offsetHeight);
-        };
-        window.addEventListener('scroll', _compactListener, { passive: true });
-      }
-
       // ── Render ─────────────────────────────────────────────────────────────────
       function render() {
         document.getElementById('root').innerHTML = html();
-        requestAnimationFrame(() => {
-          positionDisco();
-          if (S.phase === 'ready') bindCompactHeader();
-        });
+        requestAnimationFrame(positionDisco);
       }
 
       function html() {
@@ -876,23 +822,6 @@
       }
 
       function header() {
-        let stickyWeather = '';
-        if (S.phase === 'ready' && S.weather) {
-          const { hours, days } = S.weather;
-          const now = new Date();
-          const todayStr = now.toISOString().slice(0, 10);
-          const nowH = todayStr + 'T' + String(now.getHours()).padStart(2, '0') + ':00';
-          const todayHours = hours.filter((h) => h.t.startsWith(todayStr));
-          const cur = todayHours.find((h) => h.t === nowH) || todayHours[0];
-          if (cur) {
-            const info = wmo(cur.c);
-            stickyWeather = `<div class="sticky-weather">
-  <span class="sticky-temp">${T(cur.temp)}</span>
-  <span class="sticky-cond">${info.e} ${info.l}</span>
-  <span class="sticky-feels">Feels ${T(cur.feels)}</span>
-</div>`;
-          }
-        }
         return `<div class="header">
   <div class="top-row">
     <span class="app-title">🌤 ${S.locName || 'Skyline'}</span>
@@ -903,13 +832,10 @@
     </div>
     ${S.phase === 'ready' ? '<button class="disco-toggle ' + (S.discoMode ? 'on' : 'off') + '" onclick="S.discoMode=!S.discoMode;render()">' + (S.discoMode ? '🪩 ON' : '🪩 Disco') + '</button>' : ''}
   </div>
-  ${stickyWeather}
-  <div class="header-expand">
-    <div class="search-row">
-      <input class="search-input" id="si" type="search" placeholder="Search city…" autocomplete="off" autocorrect="off" spellcheck="false">
-      <button class="search-btn" onclick="doSearch()">Search</button>
-      <button class="locate-btn" onclick="locate()">⌖</button>
-    </div>
+  <div class="search-row">
+    <input class="search-input" id="si" type="search" placeholder="Search city…" autocomplete="off" autocorrect="off" spellcheck="false">
+    <button class="search-btn" onclick="doSearch()">Search</button>
+    <button class="locate-btn" onclick="locate()">⌖</button>
   </div>
 </div>`;
       }

@@ -1,0 +1,1022 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>SUP Conditions</title>
+    <style>
+      :root {
+        --safe-top: env(safe-area-inset-top, 0px);
+        --safe-bottom: env(safe-area-inset-bottom, 0px);
+        --font: -apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+        --accent: #22d3ee;
+        --bg: #061018;
+        --surface: rgba(255, 255, 255, 0.05);
+        --surface-2: rgba(255, 255, 255, 0.08);
+        --text: #e7f2f7;
+        --text-dim: #7e98a8;
+        --border: rgba(255, 255, 255, 0.1);
+        --great: #34d399;
+        --good: #60a5fa;
+        --caution: #fbbf24;
+        --poor: #f87171;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html, body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font);
+        min-height: 100dvh;
+      }
+      body {
+        background:
+          radial-gradient(circle at 18% -10%, rgba(34, 211, 238, 0.12), transparent 55%),
+          var(--bg);
+      }
+
+      /* ── Header ── */
+      .header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 20;
+        padding: calc(var(--safe-top) + 14px) 16px 12px;
+        background: rgba(6, 16, 24, 0.82);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border-bottom: 1px solid var(--border);
+      }
+      .top-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .app-title {
+        font-size: 17px;
+        font-weight: 700;
+        flex: 1;
+        letter-spacing: -0.3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .pill-group {
+        display: flex;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        padding: 2px;
+        gap: 2px;
+        flex-shrink: 0;
+      }
+      .pill-btn {
+        background: none;
+        border: none;
+        color: var(--text-dim);
+        font-family: var(--font);
+        font-size: 12px;
+        font-weight: 600;
+        padding: 5px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 0.15s, color 0.15s;
+      }
+      .pill-btn.active {
+        background: var(--accent);
+        color: #04222a;
+      }
+      .search-row {
+        display: flex;
+        gap: 8px;
+      }
+      .search-input {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 15px;
+        padding: 9px 13px;
+        outline: none;
+        min-width: 0;
+      }
+      .search-input::placeholder { color: var(--text-dim); }
+      .search-input:focus { border-color: var(--accent); }
+      .search-btn {
+        background: var(--accent);
+        border: none;
+        border-radius: 10px;
+        color: #04222a;
+        font-family: var(--font);
+        font-size: 15px;
+        font-weight: 700;
+        padding: 9px 15px;
+        cursor: pointer;
+      }
+      .locate-btn {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--accent);
+        font-family: var(--font);
+        font-size: 18px;
+        padding: 0 13px;
+        cursor: pointer;
+        line-height: 38px;
+      }
+
+      /* ── State screens ── */
+      .state-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 5;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        color: var(--text-dim);
+        font-size: 15px;
+        text-align: center;
+        padding: 0 32px;
+      }
+      .state-screen .big { font-size: 52px; }
+      .state-screen .title {
+        color: var(--text);
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .spinner {
+        width: 36px;
+        height: 36px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      /* ── Content ── */
+      .content {
+        padding: calc(var(--header-h, 132px) + 16px) 16px calc(var(--safe-bottom) + 32px);
+        max-width: 640px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      /* ── Verdict ── */
+      .verdict {
+        border-radius: 20px;
+        padding: 22px 20px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        position: relative;
+        overflow: hidden;
+      }
+      .verdict::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, var(--lvl-color, var(--accent)) 0%, transparent 60%);
+        opacity: 0.16;
+      }
+      .verdict-top {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        position: relative;
+      }
+      .verdict-emoji { font-size: 38px; line-height: 1; }
+      .verdict-label {
+        font-size: 21px;
+        font-weight: 800;
+        letter-spacing: -0.3px;
+      }
+      .verdict-sub {
+        font-size: 13px;
+        color: var(--text-dim);
+        margin-top: 2px;
+      }
+      .verdict-blurb {
+        margin-top: 12px;
+        font-size: 14px;
+        color: rgba(231, 242, 247, 0.82);
+        line-height: 1.5;
+        position: relative;
+      }
+
+      /* ── Stats grid ── */
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+      .stat-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px 14px 12px;
+      }
+      .stat-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 1px;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        margin-bottom: 6px;
+      }
+      .stat-value {
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: -0.3px;
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+      }
+      .stat-sub {
+        font-size: 12px;
+        color: var(--text-dim);
+        margin-top: 3px;
+      }
+      .dir-arrow { flex-shrink: 0; color: var(--accent); }
+      .note-card {
+        grid-column: 1 / -1;
+        background: var(--surface);
+        border: 1px dashed var(--border);
+        border-radius: 14px;
+        padding: 12px 14px;
+        font-size: 12.5px;
+        color: var(--text-dim);
+        line-height: 1.45;
+      }
+
+      /* ── Section ── */
+      .section {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 16px;
+      }
+      .section-title {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        color: var(--text-dim);
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      /* ── Tide ── */
+      .tide-canvas-wrap { width: 100%; }
+      #tide-canvas { display: block; width: 100%; }
+      .tide-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 6px;
+      }
+      .tide-now {
+        font-size: 26px;
+        font-weight: 700;
+      }
+      .tide-now-label {
+        font-size: 11px;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .tide-station {
+        font-size: 12px;
+        color: var(--text-dim);
+        text-align: right;
+      }
+      .tide-chips {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+      .tide-chip {
+        background: var(--surface-2);
+        border-radius: 10px;
+        padding: 6px 10px;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .tide-chip .chip-tag {
+        font-weight: 700;
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: 6px;
+      }
+      .chip-tag.H { background: rgba(96, 165, 250, 0.25); color: #93c5fd; }
+      .chip-tag.L { background: rgba(248, 113, 113, 0.2); color: #fca5a5; }
+
+      /* ── Hourly strip ── */
+      .hour-strip {
+        display: flex;
+        overflow-x: auto;
+        scrollbar-width: none;
+        gap: 2px;
+      }
+      .hour-strip::-webkit-scrollbar { display: none; }
+      .hi-item {
+        flex: 0 0 auto;
+        min-width: 58px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+        padding: 8px 6px 9px;
+        border-radius: 10px;
+      }
+      .hi-item.hi-now { background: rgba(255, 255, 255, 0.08); }
+      .hi-time { font-size: 11px; color: var(--text-dim); font-weight: 500; }
+      .hi-item.hi-now .hi-time { color: var(--accent); font-weight: 700; }
+      .hi-icon { font-size: 16px; line-height: 1.1; }
+      .hi-wind { font-size: 12px; font-weight: 600; }
+      .hi-wave { font-size: 11px; color: #7dd3fc; }
+      .hi-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        margin-top: 1px;
+      }
+
+      footer {
+        text-align: center;
+        font-size: 11.5px;
+        color: var(--text-dim);
+        line-height: 1.6;
+        padding: 4px 8px 0;
+      }
+      footer a { color: var(--text-dim); text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script>
+      // ── State ──────────────────────────────────────────────────────────────────
+      const S = {
+        phase: 'idle',
+        unit: 'metric',
+        locName: '',
+        lat: null,
+        lon: null,
+        weather: null,
+        marine: null,
+        tide: null,
+        lastUpdated: null,
+        errMsg: '',
+      };
+
+      // ── WMO codes ──────────────────────────────────────────────────────────────
+      const WMO = {
+        0: { l: 'Clear', e: '☀️' },
+        1: { l: 'Mostly Clear', e: '🌤' },
+        2: { l: 'Partly Cloudy', e: '⛅️' },
+        3: { l: 'Overcast', e: '☁️' },
+        45: { l: 'Fog', e: '🌫' },
+        48: { l: 'Icy Fog', e: '🌫' },
+        51: { l: 'Light Drizzle', e: '🌦' },
+        53: { l: 'Drizzle', e: '🌦' },
+        55: { l: 'Heavy Drizzle', e: '🌧' },
+        61: { l: 'Light Rain', e: '🌧' },
+        63: { l: 'Rain', e: '🌧' },
+        65: { l: 'Heavy Rain', e: '🌧' },
+        71: { l: 'Light Snow', e: '🌨' },
+        73: { l: 'Snow', e: '❄️' },
+        75: { l: 'Heavy Snow', e: '❄️' },
+        80: { l: 'Showers', e: '🌦' },
+        81: { l: 'Heavy Showers', e: '🌧' },
+        82: { l: 'Violent Showers', e: '⛈' },
+        95: { l: 'Thunderstorm', e: '⛈' },
+        96: { l: 'Thunderstorm + Hail', e: '⛈' },
+        99: { l: 'Thunderstorm + Heavy Hail', e: '⛈' },
+      };
+      function wmo(c) {
+        return WMO[c] || WMO[0];
+      }
+
+      // ── Unit formatting ───────────────────────────────────────────────────────
+      const imp = () => S.unit === 'imperial';
+      function fmtTemp(c) {
+        return imp() ? Math.round((c * 9) / 5 + 32) + '°F' : Math.round(c) + '°C';
+      }
+      function fmtWind(kmh) {
+        return imp() ? Math.round(kmh * 0.621371) + ' mph' : Math.round(kmh) + ' km/h';
+      }
+      function fmtWave(m) {
+        if (m == null) return '–';
+        return imp() ? (m * 3.28084).toFixed(1) + ' ft' : m.toFixed(1) + ' m';
+      }
+      function fmtVis(m) {
+        if (m == null) return '–';
+        return imp() ? (m / 1609.34).toFixed(1) + ' mi' : (m / 1000).toFixed(1) + ' km';
+      }
+      function fmtPeriod(s) {
+        return s == null ? '–' : Math.round(s) + 's';
+      }
+      function fmtClock(d) {
+        return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      }
+      function compass(deg) {
+        if (deg == null) return '';
+        const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+        return dirs[Math.round(deg / 22.5) % 16];
+      }
+      function uvLabel(uv) {
+        if (uv == null) return '–';
+        if (uv < 3) return 'Low';
+        if (uv < 6) return 'Moderate';
+        if (uv < 8) return 'High';
+        if (uv < 11) return 'Very High';
+        return 'Extreme';
+      }
+      function dirArrow(fromDeg, color) {
+        if (fromDeg == null) return '';
+        const toDeg = (fromDeg + 180) % 360;
+        return `<svg class="dir-arrow" width="16" height="16" viewBox="0 0 24 24" style="transform:rotate(${toDeg}deg)" fill="none" stroke="${color || 'currentColor'}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M12 5l-6 6M12 5l6 6"/></svg>`;
+      }
+
+      // ── SUP score ──────────────────────────────────────────────────────────────
+      // Thresholds are rough open-water guidance, not a substitute for local
+      // knowledge — wind/gust in km/h, wave height in metres.
+      const LEVELS = {
+        great:   { emoji: '🤙', label: 'Glassy — Get Out There',   color: 'var(--great)',   blurb: 'Flat water and light wind. About as good as it gets for paddling.' },
+        good:    { emoji: '🙂', label: 'Good to Go',               color: 'var(--good)',    blurb: 'Manageable wind and a bit of texture on the water. Solid session ahead.' },
+        caution: { emoji: '⚠️', label: 'Use Caution',              color: 'var(--caution)', blurb: 'Choppy water and brisk wind. Stick close to shore — experienced paddlers only.' },
+        poor:    { emoji: '🚫', label: 'Stay Ashore',               color: 'var(--poor)',    blurb: 'Strong wind and/or rough water. Not a safe day to be out on a board.' },
+      };
+      function supScore(windKmh, gustKmh, waveM) {
+        const w = waveM == null ? 0 : waveM;
+        const g = gustKmh == null ? windKmh : gustKmh;
+        let level;
+        if (windKmh <= 12 && g <= 18 && w <= 0.3) level = 'great';
+        else if (windKmh <= 20 && g <= 28 && w <= 0.6) level = 'good';
+        else if (windKmh <= 32 && g <= 42 && w <= 1.1) level = 'caution';
+        else level = 'poor';
+        return { level, ...LEVELS[level] };
+      }
+
+      // ── Geo helpers ────────────────────────────────────────────────────────────
+      function haversineKm(lat1, lon1, lat2, lon2) {
+        const R = 6371, toRad = (d) => (d * Math.PI) / 180;
+        const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+        return 2 * R * Math.asin(Math.sqrt(a));
+      }
+      function nearestIdx(times) {
+        const now = Date.now();
+        let best = 0, bestDiff = Infinity;
+        times.forEach((t, i) => {
+          const diff = Math.abs(new Date(t).getTime() - now);
+          if (diff < bestDiff) { bestDiff = diff; best = i; }
+        });
+        return best;
+      }
+      function ymd(d) {
+        return d.toISOString().slice(0, 10).replace(/-/g, '');
+      }
+
+      // ── API: weather + marine ─────────────────────────────────────────────────
+      async function loadWeather(lat, lon) {
+        const url =
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+          `&hourly=temperature_2m,weathercode,windspeed_10m,winddirection_10m,windgusts_10m,uv_index,visibility,precipitation_probability` +
+          `&current_weather=true&timezone=auto&forecast_days=2`;
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('Weather API error');
+        return r.json();
+      }
+
+      async function loadMarine(lat, lon) {
+        const url =
+          `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}` +
+          `&hourly=wave_height,wave_direction,wave_period,wind_wave_height,swell_wave_height,swell_wave_direction,swell_wave_period` +
+          `&timezone=auto&forecast_days=2`;
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('Marine API error');
+        const d = await r.json();
+        if (!d.hourly || !d.hourly.wave_height) throw new Error('No marine data');
+        return d;
+      }
+
+      async function geocode(q) {
+        const r = await fetch(
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en`,
+        );
+        const d = await r.json();
+        if (!d.results?.length) throw new Error('Not found');
+        return d.results[0];
+      }
+
+      async function reverseGeocode(lat, lon) {
+        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+        const d = await r.json();
+        return d.address?.city || d.address?.town || d.address?.village || d.address?.county || 'Your Location';
+      }
+
+      // ── API: NOAA tides ────────────────────────────────────────────────────────
+      async function fetchNoaaStations() {
+        const cacheKey = 'sup_noaa_stations_v1';
+        try {
+          const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+          if (cached && Date.now() - cached.fetchedAt < 30 * 24 * 3600 * 1000) return cached.stations;
+        } catch (e) {}
+        const r = await fetch('https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions');
+        if (!r.ok) throw new Error('Station list failed');
+        const d = await r.json();
+        const stations = (d.stations || [])
+          .map((s) => ({ id: s.id, name: s.name, lat: s.lat, lon: s.lng ?? s.lon }))
+          .filter((s) => s.lat != null && s.lon != null);
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({ fetchedAt: Date.now(), stations }));
+        } catch (e) {}
+        return stations;
+      }
+
+      async function findNearestStation(lat, lon) {
+        const stations = await fetchNoaaStations();
+        let best = null, bestDist = Infinity;
+        for (const s of stations) {
+          const dist = haversineKm(lat, lon, s.lat, s.lon);
+          if (dist < bestDist) { bestDist = dist; best = s; }
+        }
+        if (!best || bestDist > 100) return null;
+        return { ...best, dist: bestDist };
+      }
+
+      async function loadTide(lat, lon) {
+        const station = await findNearestStation(lat, lon);
+        if (!station) return { status: 'unavailable' };
+        const begin = new Date(Date.now() - 24 * 3600 * 1000);
+        const end = new Date(Date.now() + 48 * 3600 * 1000);
+        const base = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
+        const common =
+          `station=${station.id}&product=predictions&datum=MLLW&time_zone=lst_ldt&units=metric` +
+          `&application=bobslabs_sup&format=json&begin_date=${ymd(begin)}&end_date=${ymd(end)}`;
+        const [hRes, hiloRes] = await Promise.all([
+          fetch(`${base}?${common}&interval=h`),
+          fetch(`${base}?${common}&interval=hilo`),
+        ]);
+        const hData = await hRes.json();
+        const hiloData = await hiloRes.json();
+        if (!hData.predictions) return { status: 'unavailable' };
+        const toDate = (t) => new Date(t.replace(' ', 'T'));
+        const series = hData.predictions.map((p) => ({ t: toDate(p.t), v: parseFloat(p.v) }));
+        const hilo = (hiloData.predictions || []).map((p) => ({ t: toDate(p.t), v: parseFloat(p.v), type: p.type }));
+        return { status: 'ok', stationName: station.name, dist: station.dist, series, hilo };
+      }
+
+      function interpAt(series, ms) {
+        for (let i = 0; i < series.length - 1; i++) {
+          const a = series[i], b = series[i + 1];
+          if (ms >= a.t.getTime() && ms <= b.t.getTime()) {
+            const f = (ms - a.t.getTime()) / (b.t.getTime() - a.t.getTime());
+            return a.v + (b.v - a.v) * f;
+          }
+        }
+        return null;
+      }
+
+      function saveLocation(name, lat, lon) {
+        try {
+          localStorage.setItem('sup_loc', JSON.stringify({ name, lat, lon }));
+        } catch (e) {}
+      }
+      function loadSavedLocation() {
+        try {
+          return JSON.parse(localStorage.getItem('sup_loc'));
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // ── Tide chart ─────────────────────────────────────────────────────────────
+      function drawTideChart(canvas, tide) {
+        const dpr = window.devicePixelRatio || 1;
+        const W = canvas.parentElement.clientWidth;
+        const H = 150;
+        canvas.style.width = W + 'px';
+        canvas.style.height = H + 'px';
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        const now = Date.now();
+        const winStart = now - 6 * 3600 * 1000;
+        const winEnd = now + 30 * 3600 * 1000;
+        const pts = tide.series.filter((p) => p.t.getTime() >= winStart && p.t.getTime() <= winEnd);
+        if (pts.length < 2) return;
+
+        const vals = pts.map((p) => p.v);
+        const minV = Math.min(...vals), maxV = Math.max(...vals);
+        const pad = (maxV - minV) * 0.3 || 0.3;
+        const yMin = minV - pad, yMax = maxV + pad;
+        const topPad = 26, botPad = 24;
+
+        const xOf = (t) => ((t - winStart) / (winEnd - winStart)) * W;
+        const yOf = (v) => H - botPad - ((v - yMin) / (yMax - yMin)) * (H - topPad - botPad);
+
+        ctx.beginPath();
+        pts.forEach((p, i) => {
+          const x = xOf(p.t.getTime()), y = yOf(p.v);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        const lineGrad = ctx.createLinearGradient(0, 0, W, 0);
+        lineGrad.addColorStop(0, '#22d3ee');
+        lineGrad.addColorStop(1, '#3b82f6');
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = lineGrad;
+        ctx.stroke();
+
+        ctx.lineTo(xOf(pts[pts.length - 1].t.getTime()), H);
+        ctx.lineTo(xOf(pts[0].t.getTime()), H);
+        ctx.closePath();
+        const fillGrad = ctx.createLinearGradient(0, 0, 0, H);
+        fillGrad.addColorStop(0, 'rgba(34,211,238,0.30)');
+        fillGrad.addColorStop(1, 'rgba(34,211,238,0.02)');
+        ctx.fillStyle = fillGrad;
+        ctx.fill();
+
+        ctx.font = '10.5px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        tide.hilo
+          .filter((p) => p.t.getTime() >= winStart && p.t.getTime() <= winEnd)
+          .forEach((p) => {
+            const x = xOf(p.t.getTime()), y = yOf(p.v);
+            ctx.beginPath();
+            ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+            ctx.fillStyle = 'rgba(231,242,247,0.7)';
+            const label = `${p.type === 'H' ? '▲' : '▼'} ${fmtClock(p.t)}`;
+            ctx.fillText(label, Math.min(Math.max(x, 24), W - 24), p.type === 'H' ? Math.max(y - 10, 12) : Math.min(y + 16, H - 6));
+          });
+
+        const nowV = interpAt(tide.series, now);
+        if (nowV != null) {
+          const x = xOf(now), y = yOf(nowV);
+          ctx.beginPath();
+          ctx.moveTo(x, topPad - 14);
+          ctx.lineTo(x, H);
+          ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(x, y, 8, 0, Math.PI * 2);
+          ctx.strokeStyle = '#22d3ee';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#fff';
+          ctx.fill();
+        }
+      }
+
+      // ── HTML pieces ────────────────────────────────────────────────────────────
+      function header() {
+        return `<div class="header">
+  <div class="top-row">
+    <span class="app-title">🏄 ${S.locName || 'SUP Conditions'}</span>
+    <div class="pill-group">
+      <button class="pill-btn ${S.unit === 'metric' ? 'active' : ''}" onclick="setUnit('metric')">m</button>
+      <button class="pill-btn ${S.unit === 'imperial' ? 'active' : ''}" onclick="setUnit('imperial')">ft</button>
+    </div>
+  </div>
+  <div class="search-row">
+    <input class="search-input" id="si" type="search" placeholder="Search a beach or coastal town…" autocomplete="off" autocorrect="off" spellcheck="false">
+    <button class="search-btn" onclick="doSearch()">Search</button>
+    <button class="locate-btn" onclick="locate()">⌖</button>
+  </div>
+</div>`;
+      }
+
+      function verdictCard(score, locParts) {
+        return `<div class="verdict" style="--lvl-color:${score.color}">
+  <div class="verdict-top">
+    <div class="verdict-emoji">${score.emoji}</div>
+    <div>
+      <div class="verdict-label">${score.label}</div>
+      <div class="verdict-sub">${locParts}</div>
+    </div>
+  </div>
+  <div class="verdict-blurb">${score.blurb}</div>
+</div>`;
+      }
+
+      function statsGrid(cur) {
+        const cards = [];
+        cards.push(`<div class="stat-card">
+  <div class="stat-head">Wind ${dirArrow(cur.windDir)}</div>
+  <div class="stat-value">${fmtWind(cur.wind)}</div>
+  <div class="stat-sub">Gusts ${fmtWind(cur.gust)} · ${compass(cur.windDir)}</div>
+</div>`);
+
+        if (cur.hasMarine) {
+          cards.push(`<div class="stat-card">
+  <div class="stat-head">Waves ${dirArrow(cur.waveDir)}</div>
+  <div class="stat-value">${fmtWave(cur.wave)}</div>
+  <div class="stat-sub">${fmtPeriod(cur.wavePeriod)} period · ${compass(cur.waveDir)}</div>
+</div>`);
+          cards.push(`<div class="stat-card">
+  <div class="stat-head">Swell ${dirArrow(cur.swellDir)}</div>
+  <div class="stat-value">${fmtWave(cur.swell)}</div>
+  <div class="stat-sub">${fmtPeriod(cur.swellPeriod)} period · ${compass(cur.swellDir)}</div>
+</div>`);
+        }
+
+        cards.push(`<div class="stat-card">
+  <div class="stat-head">Air Temp</div>
+  <div class="stat-value">${fmtTemp(cur.temp)}</div>
+  <div class="stat-sub">${wmo(cur.code).e} ${wmo(cur.code).l}</div>
+</div>`);
+
+        cards.push(`<div class="stat-card">
+  <div class="stat-head">UV Index</div>
+  <div class="stat-value">${cur.uv != null ? Math.round(cur.uv) : '–'}</div>
+  <div class="stat-sub">${uvLabel(cur.uv)}</div>
+</div>`);
+
+        cards.push(`<div class="stat-card">
+  <div class="stat-head">Visibility</div>
+  <div class="stat-value">${fmtVis(cur.visibility)}</div>
+  <div class="stat-sub">${cur.precip != null ? `💧 ${cur.precip}% precip` : ''}</div>
+</div>`);
+
+        if (!cur.hasMarine) {
+          cards.push(`<div class="note-card">🌊 No open-water wave data for this spot — it may be inland or outside marine model coverage. Score is based on wind alone.</div>`);
+        }
+
+        return `<div class="stats-grid">${cards.join('')}</div>`;
+      }
+
+      function tideSection() {
+        const tide = S.tide;
+        if (!tide || tide.status !== 'ok') {
+          return `<div class="section">
+  <div class="section-title">Tides</div>
+  <div class="note-card" style="margin:0">🗽 Live tide predictions currently cover US coastal NOAA stations only. This location is outside that coverage, or too far from the nearest station.</div>
+</div>`;
+        }
+        const now = Date.now();
+        const nowV = interpAt(tide.series, now);
+        const upcoming = tide.hilo.filter((p) => p.t.getTime() >= now).slice(0, 4);
+        const chips = upcoming
+          .map(
+            (p) => `<div class="tide-chip"><span class="chip-tag ${p.type}">${p.type === 'H' ? 'HIGH' : 'LOW'}</span> ${fmtClock(p.t)} · ${fmtWave(p.v)}</div>`,
+          )
+          .join('');
+        return `<div class="section">
+  <div class="section-title">Tides</div>
+  <div class="tide-meta">
+    <div>
+      <div class="tide-now">${nowV != null ? fmtWave(nowV) : '–'}</div>
+      <div class="tide-now-label">Current Height</div>
+    </div>
+    <div class="tide-station">${tide.stationName}<br>${tide.dist.toFixed(0)} km away</div>
+  </div>
+  <div class="tide-canvas-wrap"><canvas id="tide-canvas"></canvas></div>
+  <div class="tide-chips">${chips}</div>
+</div>`;
+      }
+
+      function hourlySection(rows) {
+        const items = rows
+          .map((r, i) => {
+            const score = supScore(r.wind, r.gust, r.wave);
+            return `<div class="hi-item${i === 0 ? ' hi-now' : ''}">
+  <div class="hi-time">${i === 0 ? 'Now' : fmtClock(r.time)}</div>
+  <div class="hi-icon">${wmo(r.code).e}</div>
+  <div class="hi-wind">${fmtWind(r.wind)}</div>
+  ${r.wave != null ? `<div class="hi-wave">${fmtWave(r.wave)}</div>` : ''}
+  <div class="hi-dot" style="background:${score.color}"></div>
+</div>`;
+          })
+          .join('');
+        return `<div class="section">
+  <div class="section-title">Next 12 Hours</div>
+  <div class="hour-strip">${items}</div>
+</div>`;
+      }
+
+      function currentConditions() {
+        const w = S.weather;
+        const cur = w.current_weather;
+        const idx = nearestIdx(w.hourly.time);
+        const out = {
+          wind: cur.windspeed,
+          windDir: cur.winddirection,
+          gust: w.hourly.windgusts_10m?.[idx],
+          temp: cur.temperature,
+          code: cur.weathercode,
+          uv: w.hourly.uv_index?.[idx],
+          visibility: w.hourly.visibility?.[idx],
+          precip: w.hourly.precipitation_probability?.[idx],
+          hasMarine: false,
+        };
+        if (S.marine) {
+          const mIdx = nearestIdx(S.marine.hourly.time);
+          const mh = S.marine.hourly;
+          out.hasMarine = true;
+          out.wave = mh.wave_height?.[mIdx];
+          out.waveDir = mh.wave_direction?.[mIdx];
+          out.wavePeriod = mh.wave_period?.[mIdx];
+          out.swell = mh.swell_wave_height?.[mIdx];
+          out.swellDir = mh.swell_wave_direction?.[mIdx];
+          out.swellPeriod = mh.swell_wave_period?.[mIdx];
+        }
+        return out;
+      }
+
+      function hourlyRows() {
+        const w = S.weather;
+        const now = Date.now();
+        const marineByTime = {};
+        if (S.marine) {
+          S.marine.hourly.time.forEach((t, i) => {
+            marineByTime[t] = S.marine.hourly.wave_height[i];
+          });
+        }
+        const rows = [];
+        w.hourly.time.forEach((t, i) => {
+          const time = new Date(t);
+          if (time.getTime() < now - 30 * 60 * 1000) return;
+          if (rows.length >= 12) return;
+          rows.push({
+            time,
+            code: w.hourly.weathercode[i],
+            wind: w.hourly.windspeed_10m[i],
+            gust: w.hourly.windgusts_10m?.[i],
+            wave: marineByTime[t],
+          });
+        });
+        return rows;
+      }
+
+      function body() {
+        if (S.phase === 'idle')
+          return `<div class="state-screen">
+  <div class="big">🏄</div>
+  <div class="title">SUP Conditions</div>
+  <p>Search a beach or coastal town, or use your location, to check wind, waves and tides.</p>
+</div>`;
+
+        if (S.phase === 'loading')
+          return `<div class="state-screen">
+  <div class="spinner"></div><p>Checking the water…</p>
+</div>`;
+
+        if (S.phase === 'error')
+          return `<div class="state-screen">
+  <div class="big">⚠️</div>
+  <div class="title">Something went wrong</div>
+  <p>${S.errMsg}</p>
+</div>`;
+
+        const cur = currentConditions();
+        const score = supScore(cur.wind, cur.gust, cur.wave);
+        const updated = S.lastUpdated ? `Updated ${fmtClock(S.lastUpdated)}` : '';
+
+        return `<div class="content">
+  ${verdictCard(score, [S.locName, updated].filter(Boolean).join(' · '))}
+  ${statsGrid(cur)}
+  ${tideSection()}
+  ${hourlySection(hourlyRows())}
+  <footer>Weather &amp; waves: Open-Meteo · Tides: NOAA CO-OPS<br>Conditions are a guide, not a safety guarantee — always check local advisories.</footer>
+</div>`;
+      }
+
+      // ── Render ─────────────────────────────────────────────────────────────────
+      function render() {
+        document.getElementById('root').innerHTML = header() + body();
+        requestAnimationFrame(() => {
+          const headerEl = document.querySelector('.header');
+          if (headerEl) document.documentElement.style.setProperty('--header-h', headerEl.offsetHeight + 'px');
+          if (S.phase === 'ready' && S.tide && S.tide.status === 'ok') {
+            const c = document.getElementById('tide-canvas');
+            if (c) drawTideChart(c, S.tide);
+          }
+        });
+      }
+
+      function setUnit(u) {
+        S.unit = u;
+        render();
+      }
+
+      // ── Load flow ──────────────────────────────────────────────────────────────
+      async function loadAll(lat, lon, name) {
+        S.phase = 'loading';
+        render();
+        try {
+          const [weather, marine, tide] = await Promise.all([
+            loadWeather(lat, lon),
+            loadMarine(lat, lon).catch(() => null),
+            loadTide(lat, lon).catch(() => ({ status: 'unavailable' })),
+          ]);
+          S.weather = weather;
+          S.marine = marine;
+          S.tide = tide;
+          S.lat = lat;
+          S.lon = lon;
+          S.locName = name;
+          S.lastUpdated = new Date();
+          S.phase = 'ready';
+          saveLocation(name, lat, lon);
+        } catch (e) {
+          S.errMsg = 'Could not load conditions for that location.';
+          S.phase = 'error';
+        }
+        render();
+      }
+
+      async function search(q) {
+        if (!q.trim()) return;
+        try {
+          const loc = await geocode(q);
+          const name = loc.name + (loc.admin1 ? ', ' + loc.admin1 : '');
+          await loadAll(loc.latitude, loc.longitude, name);
+        } catch (e) {
+          S.errMsg = 'Could not find that location.';
+          S.phase = 'error';
+          render();
+        }
+      }
+
+      function locate() {
+        if (!navigator.geolocation) {
+          S.errMsg = 'Geolocation not supported.';
+          S.phase = 'error';
+          render();
+          return;
+        }
+        S.phase = 'loading';
+        render();
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            const { latitude: lat, longitude: lon } = pos.coords;
+            let name = 'Your Location';
+            try {
+              name = await reverseGeocode(lat, lon);
+            } catch (e) {}
+            await loadAll(lat, lon, name);
+          },
+          () => {
+            S.errMsg = 'Location access denied.';
+            S.phase = 'error';
+            render();
+          },
+          { timeout: 12000 },
+        );
+      }
+
+      function doSearch() {
+        search((document.getElementById('si') || {}).value || '');
+      }
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target?.id === 'si') doSearch();
+      });
+      window.addEventListener('resize', () => {
+        if (S.phase === 'ready' && S.tide && S.tide.status === 'ok') {
+          const c = document.getElementById('tide-canvas');
+          if (c) drawTideChart(c, S.tide);
+        }
+      });
+
+      // ── Init ───────────────────────────────────────────────────────────────────
+      (async () => {
+        const saved = loadSavedLocation();
+        if (saved) await loadAll(saved.lat, saved.lon, saved.name);
+        else render();
+      })();
+    </script>
+  </body>
+</html>

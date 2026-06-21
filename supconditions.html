@@ -134,6 +134,45 @@
         cursor: pointer;
         line-height: 38px;
       }
+      .locate-btn.active {
+        border-color: var(--accent);
+        color: #fff;
+        background: rgba(34, 211, 238, 0.18);
+      }
+
+      .settings-panel {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+      }
+      .settings-hint {
+        font-size: 12.5px;
+        color: var(--text-dim);
+        line-height: 1.5;
+        margin-bottom: 8px;
+      }
+      .settings-row {
+        display: flex;
+        gap: 8px;
+      }
+      .settings-links {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 8px;
+        font-size: 12.5px;
+      }
+      .settings-links a { color: var(--accent); text-decoration: none; }
+      .link-btn {
+        background: none;
+        border: none;
+        color: var(--text-dim);
+        font-family: var(--font);
+        font-size: 12.5px;
+        text-decoration: underline;
+        cursor: pointer;
+        padding: 0;
+      }
 
       /* ── State screens ── */
       .state-screen {
@@ -389,6 +428,7 @@
         tide: null,
         lastUpdated: null,
         errMsg: '',
+        settingsOpen: false,
       };
 
       // ── WMO codes ──────────────────────────────────────────────────────────────
@@ -568,7 +608,7 @@
         return { ...best, dist: bestDist };
       }
 
-      async function loadTide(lat, lon) {
+      async function loadNoaaTide(lat, lon) {
         const station = await findNearestStation(lat, lon);
         if (!station) return { status: 'unavailable' };
         const begin = new Date(Date.now() - 24 * 3600 * 1000);
@@ -587,7 +627,123 @@
         const toDate = (t) => new Date(t.replace(' ', 'T'));
         const series = hData.predictions.map((p) => ({ t: toDate(p.t), v: parseFloat(p.v) }));
         const hilo = (hiloData.predictions || []).map((p) => ({ t: toDate(p.t), v: parseFloat(p.v), type: p.type }));
-        return { status: 'ok', stationName: station.name, dist: station.dist, series, hilo };
+        return { status: 'ok', stationName: station.name, dist: station.dist, series, hilo, source: 'NOAA CO-OPS' };
+      }
+
+      // ── API: Admiralty UKHO tides (UK & international, needs a free key) ───────
+      const ADMIRALTY_BASE = 'https://admiraltyapi.azure-api.net/uktidalapi/api/V1';
+
+      function getAdmiraltyKey() {
+        try {
+          return localStorage.getItem('sup_admiralty_key') || '';
+        } catch (e) {
+          return '';
+        }
+      }
+      function saveAdmiraltyKey() {
+        const v = (document.getElementById('admiralty-key-input') || {}).value || '';
+        try {
+          localStorage.setItem('sup_admiralty_key', v.trim());
+        } catch (e) {}
+        if (S.lat != null) loadAll(S.lat, S.lon, S.locName);
+        else render();
+      }
+      function clearAdmiraltyKey() {
+        try {
+          localStorage.removeItem('sup_admiralty_key');
+        } catch (e) {}
+        if (S.lat != null) loadAll(S.lat, S.lon, S.locName);
+        else render();
+      }
+      function toggleSettings() {
+        S.settingsOpen = !S.settingsOpen;
+        render();
+      }
+
+      async function fetchAdmiraltyStations(key) {
+        const cacheKey = 'sup_admiralty_stations_v1';
+        try {
+          const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+          if (cached && Date.now() - cached.fetchedAt < 30 * 24 * 3600 * 1000) return cached.stations;
+        } catch (e) {}
+        const r = await fetch(`${ADMIRALTY_BASE}/Stations`, { headers: { 'Ocp-Apim-Subscription-Key': key } });
+        if (!r.ok) throw new Error('Admiralty station list failed');
+        const d = await r.json();
+        const features = d.features || d.Features || [];
+        const stations = features
+          .map((f) => {
+            const props = f.properties || f.Properties || {};
+            const coords = (f.geometry && f.geometry.coordinates) || (f.Geometry && f.Geometry.Coordinates) || [];
+            return {
+              id: props.Id ?? props.id,
+              name: props.Name ?? props.name,
+              lon: coords[0],
+              lat: coords[1],
+            };
+          })
+          .filter((s) => s.id && s.lat != null && s.lon != null);
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({ fetchedAt: Date.now(), stations }));
+        } catch (e) {}
+        return stations;
+      }
+
+      async function findNearestAdmiraltyStation(lat, lon, key) {
+        const stations = await fetchAdmiraltyStations(key);
+        let best = null, bestDist = Infinity;
+        for (const s of stations) {
+          const dist = haversineKm(lat, lon, s.lat, s.lon);
+          if (dist < bestDist) { bestDist = dist; best = s; }
+        }
+        if (!best || bestDist > 60) return null;
+        return { ...best, dist: bestDist };
+      }
+
+      async function loadAdmiraltyTide(lat, lon, key) {
+        const station = await findNearestAdmiraltyStation(lat, lon, key);
+        if (!station) return { status: 'unavailable' };
+        const headers = { 'Ocp-Apim-Subscription-Key': key };
+        const [eventsRes, heightsRes] = await Promise.all([
+          fetch(`${ADMIRALTY_BASE}/Stations/${station.id}/TidalEvents?duration=3`, { headers }),
+          fetch(`${ADMIRALTY_BASE}/Stations/${station.id}/TidalHeights?duration=36&interval=15`, { headers }),
+        ]);
+        if (!eventsRes.ok || !heightsRes.ok) return { status: 'unavailable' };
+        const events = await eventsRes.json();
+        const heights = await heightsRes.json();
+        const pick = (o, ...keys) => {
+          for (const k of keys) if (o[k] !== undefined) return o[k];
+          return undefined;
+        };
+        const series = (Array.isArray(heights) ? heights : [])
+          .map((h) => ({ t: new Date(pick(h, 'DateTime', 'dateTime', 'Date')), v: parseFloat(pick(h, 'Height', 'height')) }))
+          .filter((p) => !isNaN(p.t.getTime()) && !isNaN(p.v));
+        const hilo = (Array.isArray(events) ? events : [])
+          .map((e) => {
+            const type = pick(e, 'EventType', 'eventType') || '';
+            return {
+              t: new Date(pick(e, 'DateTime', 'dateTime', 'Date')),
+              v: parseFloat(pick(e, 'Height', 'height')),
+              type: /high/i.test(type) ? 'H' : 'L',
+            };
+          })
+          .filter((p) => !isNaN(p.t.getTime()));
+        if (series.length < 2) return { status: 'unavailable' };
+        return { status: 'ok', stationName: station.name, dist: station.dist, series, hilo, source: 'Admiralty UKHO' };
+      }
+
+      async function loadTide(lat, lon) {
+        try {
+          const noaa = await loadNoaaTide(lat, lon);
+          if (noaa.status === 'ok') return noaa;
+        } catch (e) {}
+        const key = getAdmiraltyKey();
+        if (key) {
+          try {
+            const adm = await loadAdmiraltyTide(lat, lon, key);
+            if (adm.status === 'ok') return adm;
+          } catch (e) {}
+        }
+        return { status: 'unavailable', needsKey: !key };
       }
 
       function interpAt(series, ms) {
@@ -703,6 +859,7 @@
 
       // ── HTML pieces ────────────────────────────────────────────────────────────
       function header() {
+        const hasKey = !!getAdmiraltyKey();
         return `<div class="header">
   <div class="top-row">
     <span class="app-title">🏄 ${S.locName || 'SUP Conditions'}</span>
@@ -715,6 +872,24 @@
     <input class="search-input" id="si" type="search" placeholder="Search a beach or coastal town…" autocomplete="off" autocorrect="off" spellcheck="false">
     <button class="search-btn" onclick="doSearch()">Search</button>
     <button class="locate-btn" onclick="locate()">⌖</button>
+    <button class="locate-btn ${hasKey ? 'active' : ''}" onclick="toggleSettings()" title="Tide API key">⚙</button>
+  </div>
+  ${settingsPanel()}
+</div>`;
+      }
+
+      function settingsPanel() {
+        if (!S.settingsOpen) return '';
+        const key = getAdmiraltyKey();
+        return `<div class="settings-panel">
+  <div class="settings-hint">NOAA covers US coastal tides for free, no key needed. Add a free <strong>Admiralty UKHO</strong> API key to unlock UK &amp; international tide predictions too.</div>
+  <div class="settings-row">
+    <input class="search-input" id="admiralty-key-input" type="text" placeholder="Admiralty API key" value="${key}" autocomplete="off" autocorrect="off" spellcheck="false">
+    <button class="search-btn" onclick="saveAdmiraltyKey()">Save</button>
+  </div>
+  <div class="settings-links">
+    <a href="https://admiraltyapi.portal.azure-api.net/" target="_blank" rel="noopener">Get a free key →</a>
+    ${key ? `<button class="link-btn" onclick="clearAdmiraltyKey()">Remove key</button>` : ''}
   </div>
 </div>`;
       }
@@ -781,9 +956,12 @@
       function tideSection() {
         const tide = S.tide;
         if (!tide || tide.status !== 'ok') {
+          const note = tide && tide.needsKey === false
+            ? '🌊 No tide station found near this location in either the NOAA or Admiralty network.'
+            : `🌍 Live tide predictions need a nearby station. NOAA covers US coasts for free — for UK &amp; international tides, add a free Admiralty API key via <button class="link-btn" onclick="toggleSettings()">settings ⚙</button>.`;
           return `<div class="section">
   <div class="section-title">Tides</div>
-  <div class="note-card" style="margin:0">🗽 Live tide predictions currently cover US coastal NOAA stations only. This location is outside that coverage, or too far from the nearest station.</div>
+  <div class="note-card" style="margin:0">${note}</div>
 </div>`;
         }
         const now = Date.now();
@@ -795,7 +973,7 @@
           )
           .join('');
         return `<div class="section">
-  <div class="section-title">Tides</div>
+  <div class="section-title">Tides <span style="font-weight:500;text-transform:none;letter-spacing:0">${tide.source}</span></div>
   <div class="tide-meta">
     <div>
       <div class="tide-now">${nowV != null ? fmtWave(nowV) : '–'}</div>
@@ -910,7 +1088,7 @@
   ${statsGrid(cur)}
   ${tideSection()}
   ${hourlySection(hourlyRows())}
-  <footer>Weather &amp; waves: Open-Meteo · Tides: NOAA CO-OPS<br>Conditions are a guide, not a safety guarantee — always check local advisories.</footer>
+  <footer>Weather &amp; waves: Open-Meteo · Tides: ${S.tide && S.tide.source ? S.tide.source : 'NOAA CO-OPS / Admiralty UKHO'}<br>Conditions are a guide, not a safety guarantee — always check local advisories.</footer>
 </div>`;
       }
 

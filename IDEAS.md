@@ -4,7 +4,6 @@ Rough concepts worth building someday. Anything moved to a real file gets crosse
 
 ## Weather & sky
 
-- [ ] **Tide clock** — tide height as an animated wave for any coastal location (NOAA / Open-Meteo marine API)
 - [ ] **Sun tracker** — arc showing sunrise / golden hour / sunset for your location, live dot moving along it
 - [ ] **Moon phase** — canvas-drawn moon showing tonight's phase, illumination %, rise/set times
 - [ ] **Starfield for tonight** — given your location + time, show which constellations are above the horizon (pure trig, no API)

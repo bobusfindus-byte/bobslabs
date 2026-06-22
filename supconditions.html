@@ -302,6 +302,32 @@
         margin-top: 3px;
       }
       .dir-arrow { flex-shrink: 0; color: var(--accent); }
+      .sewage-card {
+        border-radius: 14px;
+        padding: 12px 14px;
+        margin-bottom: 14px;
+        border: 1px solid;
+      }
+      .sewage-title {
+        font-size: 13px;
+        font-weight: 700;
+        margin-bottom: 3px;
+      }
+      .sewage-body {
+        font-size: 12.5px;
+        line-height: 1.45;
+        color: var(--text-dim);
+      }
+      .sewage-active {
+        background: rgba(248, 113, 113, 0.1);
+        border-color: rgba(248, 113, 113, 0.35);
+      }
+      .sewage-active .sewage-title { color: var(--poor); }
+      .sewage-caution {
+        background: rgba(251, 191, 36, 0.1);
+        border-color: rgba(251, 191, 36, 0.35);
+      }
+      .sewage-caution .sewage-title { color: var(--caution); }
       .note-card {
         grid-column: 1 / -1;
         background: var(--surface);
@@ -436,6 +462,7 @@
         marine: null,
         flood: null,
         tide: null,
+        sewage: null,
         lastUpdated: null,
         errMsg: '',
         settingsOpen: false,
@@ -585,6 +612,40 @@
         const d = await r.json();
         if (!d.daily || !d.daily.river_discharge) throw new Error('No flood data');
         return d;
+      }
+
+      // ── API: UK storm overflow / sewage discharge (Environment Agency EDM,
+      // published per-water-company on ArcGIS Online). Each company runs its
+      // own FeatureServer with an identical schema (Status -1 offline /
+      // 0 not discharging / 1 discharging). Only Severn Trent's feed is wired
+      // up so far — add more entries here once their FeatureServer URLs are
+      // confirmed.
+      const SEWAGE_FEEDS = [
+        {
+          company: 'Severn Trent Water',
+          url: 'https://services1.arcgis.com/NO7lTIlnxRMMG9Gw/arcgis/rest/services/Severn_Trent_Water_Storm_Overflow_Activity/FeatureServer/0/query',
+        },
+      ];
+
+      async function loadSewage(lat, lon) {
+        const radiusKm = 15;
+        const perFeed = await Promise.all(
+          SEWAGE_FEEDS.map(async (feed) => {
+            const url =
+              `${feed.url}?outFields=*&where=1%3D1&geometry=${lon},${lat}&geometryType=esriGeometryPoint` +
+              `&inSR=4326&spatialRel=esriSpatialRelIntersects&distance=${radiusKm}&units=esriSRUnit_Kilometer&f=geojson`;
+            const r = await fetch(url);
+            if (!r.ok) return [];
+            const d = await r.json();
+            return (d.features || []).map((f) => ({ ...f.properties, company: feed.company }));
+          }),
+        );
+        const points = perFeed
+          .flat()
+          .map((p) => ({ ...p, dist: haversineKm(lat, lon, p.Latitude, p.Longitude) }));
+        if (!points.length) return null;
+        points.sort((a, b) => a.dist - b.dist);
+        return points[0];
       }
 
       async function geocode(q) {
@@ -981,6 +1042,30 @@
 </div>`;
       }
 
+      function titleCase(s) {
+        return (s || '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+      }
+
+      function sewageCard() {
+        const s = S.sewage;
+        if (!s) return '';
+        const where = `${s.dist.toFixed(1)} km away on the ${titleCase(s.ReceivingWaterCourse) || 'nearby watercourse'}`;
+        if (s.Status === 1) {
+          return `<div class="sewage-card sewage-active">
+  <div class="sewage-title">🚱 Storm overflow discharging</div>
+  <div class="sewage-body">${s.company} reports an active discharge ${where}. Avoid paddling near this outflow.</div>
+</div>`;
+        }
+        const hoursSince = s.LatestEventEnd ? (Date.now() - s.LatestEventEnd) / 36e5 : null;
+        if (s.Status === 0 && hoursSince != null && hoursSince < 48) {
+          return `<div class="sewage-card sewage-caution">
+  <div class="sewage-title">⚠️ Recent storm overflow</div>
+  <div class="sewage-body">${s.company} reports a discharge stopped ${Math.round(hoursSince)}h ago ${where}. Water quality may still be affected.</div>
+</div>`;
+        }
+        return '';
+      }
+
       function verdictCard(score, locParts) {
         return `<div class="verdict" style="--lvl-color:${score.color}">
   <div class="verdict-top">
@@ -1201,10 +1286,11 @@
 
         return `<div class="content">
   ${verdictCard(score, [S.locName, updated].filter(Boolean).join(' · '))}
+  ${sewageCard()}
   ${statsGrid(cur)}
   ${tideSection()}
   ${hourlySection(hourlyRows())}
-  <footer>Weather, waves &amp; river flow: Open-Meteo · Tides: ${S.tide && S.tide.source ? S.tide.source : 'NOAA CO-OPS / Admiralty UKHO'}<br>Conditions are a guide, not a safety guarantee — always check local advisories.</footer>
+  <footer>Weather, waves &amp; river flow: Open-Meteo · Tides: ${S.tide && S.tide.source ? S.tide.source : 'NOAA CO-OPS / Admiralty UKHO'} · Storm overflows: Severn Trent Water EDM (UK coverage only)<br>Conditions are a guide, not a safety guarantee — always check local advisories.</footer>
 </div>`;
       }
 
@@ -1231,16 +1317,18 @@
         S.phase = 'loading';
         render();
         try {
-          const [weather, marine, flood, tide] = await Promise.all([
+          const [weather, marine, flood, tide, sewage] = await Promise.all([
             loadWeather(lat, lon),
             loadMarine(lat, lon).catch(() => null),
             loadFlood(lat, lon).catch(() => null),
             loadTide(lat, lon).catch(() => ({ status: 'unavailable' })),
+            loadSewage(lat, lon).catch(() => null),
           ]);
           S.weather = weather;
           S.marine = marine;
           S.flood = flood;
           S.tide = tide;
+          S.sewage = sewage;
           S.lat = lat;
           S.lon = lon;
           S.locName = name;

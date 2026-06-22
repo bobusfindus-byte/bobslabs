@@ -16,6 +16,7 @@ All apps use free, no-key APIs:
 - **Weather:** [Open-Meteo](https://open-meteo.com)
 - **Marine / waves:** [Open-Meteo Marine API](https://open-meteo.com/en/docs/marine-weather-api)
 - **River flow (inland spots):** [Open-Meteo Flood API](https://open-meteo.com/en/docs/flood-api)
+- **Storm overflows (UK):** Environment Agency EDM data, published per water company on ArcGIS Online — currently wired up for Severn Trent Water only
 - **Tides:** [NOAA CO-OPS](https://api.tidesandcurrents.noaa.gov/api/prod/) (US coastal stations, free, no key) · [Admiralty UKHO](https://admiraltyapi.developer.azure-api.net/) (UK & international, free key, routed through your own Cloudflare Worker proxy — see `workers/admiralty-proxy.js`)
 - **Geocoding:** [Open-Meteo Geocoding](https://open-meteo.com/en/docs/geocoding-api)
 - **Reverse geocoding:** [Nominatim / OpenStreetMap](https://nominatim.org)

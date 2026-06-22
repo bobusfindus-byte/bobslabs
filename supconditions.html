@@ -653,8 +653,23 @@
           `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en`,
         );
         const d = await r.json();
-        if (!d.results?.length) throw new Error('Not found');
-        return d.results[0];
+        if (d.results?.length) return d.results[0];
+
+        // Open-Meteo's geocoder only indexes populated places — fall back to
+        // Nominatim for smaller landmarks (mills, locks, weirs, etc.) that
+        // river SUP spots are often named after.
+        const nr = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&addressdetails=1&limit=1`,
+        );
+        const nd = await nr.json();
+        if (!nd.length) throw new Error('Not found');
+        const a = nd[0].address || {};
+        return {
+          name: nd[0].name || nd[0].display_name.split(',')[0].trim(),
+          admin1: a.county || a.state || '',
+          latitude: parseFloat(nd[0].lat),
+          longitude: parseFloat(nd[0].lon),
+        };
       }
 
       async function reverseGeocode(lat, lon) {

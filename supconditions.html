@@ -6,6 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>SUP Conditions</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
       :root {
         --safe-top: env(safe-area-inset-top, 0px);
@@ -182,6 +183,79 @@
       .proxy-test.ok { color: #4ade80; }
       .proxy-test.fail { color: #f87171; }
       .proxy-test.warn { color: var(--amber, #f59e0b); }
+
+      /* ── Map picker ── */
+      .map-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg);
+      }
+      .map-overlay.hidden { display: none; }
+      .map-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: calc(var(--safe-top) + 10px) 14px 10px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+      }
+      .map-bar-title {
+        flex: 1;
+        font-size: 14px;
+        color: var(--text-dim);
+      }
+      .map-close-btn {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 18px;
+        padding: 0 13px;
+        cursor: pointer;
+        line-height: 34px;
+      }
+      #map-pick-canvas {
+        flex: 1;
+        width: 100%;
+      }
+      .map-pick-footer {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px calc(var(--safe-bottom) + 10px);
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+      }
+      .map-pick-name {
+        flex: 1;
+        font-size: 13.5px;
+        color: var(--text-dim);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .map-pick-confirm {
+        background: var(--accent);
+        border: none;
+        border-radius: 10px;
+        color: #04222a;
+        font-family: var(--font);
+        font-size: 15px;
+        font-weight: 700;
+        padding: 9px 16px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .map-pick-confirm:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .leaflet-pane,
+      .leaflet-control { z-index: 1; }
 
       /* ── State screens ── */
       .state-screen {
@@ -461,6 +535,19 @@
   <body>
     <div id="root"></div>
 
+    <div class="map-overlay hidden" id="map-overlay">
+      <div class="map-bar">
+        <span class="map-bar-title">Tap the map to drop a pin</span>
+        <button class="map-close-btn" onclick="closeMapPicker()">✕</button>
+      </div>
+      <div id="map-pick-canvas"></div>
+      <div class="map-pick-footer">
+        <span class="map-pick-name" id="map-pick-name">No location picked yet</span>
+        <button class="map-pick-confirm" id="map-pick-confirm" onclick="confirmMapPick()" disabled>Use this spot</button>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
       // ── State ──────────────────────────────────────────────────────────────────
       const S = {
@@ -1132,6 +1219,7 @@
   <div class="search-row">
     <input class="search-input" id="si" type="search" placeholder="Search a beach or coastal town…" autocomplete="off" autocorrect="off" spellcheck="false">
     <button class="search-btn" onclick="doSearch()">Search</button>
+    <button class="locate-btn" onclick="openMapPicker()" title="Pick on map">🗺</button>
     <button class="locate-btn" onclick="locate()">⌖</button>
     <button class="locate-btn ${hasProxy ? 'active' : ''}" onclick="toggleSettings()" title="Tide proxy settings">⚙</button>
   </div>
@@ -1515,6 +1603,62 @@
           },
           { timeout: 12000 },
         );
+      }
+
+      let mapPicker = null;
+      let mapPickMarker = null;
+      let mapPick = null;
+
+      function openMapPicker() {
+        document.getElementById('map-overlay').classList.remove('hidden');
+        document.getElementById('map-pick-name').textContent = 'No location picked yet';
+        document.getElementById('map-pick-confirm').disabled = true;
+        mapPick = null;
+        if (!mapPicker) {
+          mapPicker = L.map('map-pick-canvas', { attributionControl: false }).setView(
+            [S.lat ?? 51.5, S.lon ?? -0.12],
+            S.lat != null ? 10 : 5,
+          );
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            subdomains: 'abcd',
+            maxZoom: 19,
+          }).addTo(mapPicker);
+          mapPicker.on('click', (e) => setMapPick(e.latlng.lat, e.latlng.lng));
+        } else {
+          mapPicker.setView([S.lat ?? 51.5, S.lon ?? -0.12], S.lat != null ? 10 : 5);
+          if (mapPickMarker) {
+            mapPicker.removeLayer(mapPickMarker);
+            mapPickMarker = null;
+          }
+        }
+        setTimeout(() => mapPicker.invalidateSize(), 0);
+      }
+
+      function setMapPick(lat, lon) {
+        mapPick = { lat, lon };
+        if (mapPickMarker) mapPicker.removeLayer(mapPickMarker);
+        mapPickMarker = L.marker([lat, lon]).addTo(mapPicker);
+        document.getElementById('map-pick-name').textContent = `${lat.toFixed(4)}, ${lon.toFixed(4)} — looking up name…`;
+        document.getElementById('map-pick-confirm').disabled = false;
+        reverseGeocode(lat, lon)
+          .then((name) => {
+            if (mapPick && mapPick.lat === lat && mapPick.lon === lon) {
+              mapPick.name = name;
+              document.getElementById('map-pick-name').textContent = name;
+            }
+          })
+          .catch(() => {});
+      }
+
+      function closeMapPicker() {
+        document.getElementById('map-overlay').classList.add('hidden');
+      }
+
+      async function confirmMapPick() {
+        if (!mapPick) return;
+        const { lat, lon, name } = mapPick;
+        closeMapPicker();
+        await loadAll(lat, lon, name || 'Picked Location');
       }
 
       function doSearch() {

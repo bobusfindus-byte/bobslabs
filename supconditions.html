@@ -730,26 +730,22 @@
       // report how far away that cell actually is — so we can't tell from
       // its response alone whether a spot is really coastal. Check distance
       // to the nearest mapped coastline (OpenStreetMap Overpass) instead.
+      // Single small-radius query, since we only need to know if it's within
+      // the near-coast threshold (currently 3km) — no need to ever fetch a
+      // country-scale coastline.
       async function loadCoastDistanceKm(lat, lon) {
-        let queriedOk = false;
+        const q = `[out:json][timeout:8];way["natural"="coastline"](around:5000,${lat},${lon});out geom;`;
+        const r = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`);
+        if (!r.ok) throw new Error('Coastline lookup failed');
+        const d = await r.json();
         let best = null;
-        for (const radiusM of [5000, 20000, 60000, 150000]) {
-          const q = `[out:json][timeout:15];way["natural"="coastline"](around:${radiusM},${lat},${lon});out geom;`;
-          const r = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`);
-          if (!r.ok) continue;
-          queriedOk = true;
-          const d = await r.json();
-          for (const el of d.elements || []) {
-            for (const pt of el.geometry || []) {
-              const dist = haversineKm(lat, lon, pt.lat, pt.lon);
-              if (best == null || dist < best) best = dist;
-            }
+        for (const el of d.elements || []) {
+          for (const pt of el.geometry || []) {
+            const dist = haversineKm(lat, lon, pt.lat, pt.lon);
+            if (best == null || dist < best) best = dist;
           }
-          if (best != null) break;
         }
-        if (best != null) return best;
-        if (queriedOk) return Infinity; // searched out to 150km, found no coastline — truly inland
-        throw new Error('Coastline lookup failed');
+        return best == null ? Infinity : best;
       }
 
       // River discharge for inland spots (rivers, lakes fed by rivers) — global
@@ -770,8 +766,8 @@
       // GloFAS gives flow numbers for a grid cell but no name, so this fills
       // in "which river is this" for the inland-spot card. Free, no key.
       async function loadNearestRiver(lat, lon) {
-        for (const radiusM of [3000, 10000, 25000]) {
-          const q = `[out:json][timeout:10];way["waterway"~"^(river|stream|canal)$"]["name"](around:${radiusM},${lat},${lon});out tags geom;`;
+        for (const radiusM of [3000, 10000]) {
+          const q = `[out:json][timeout:8];way["waterway"~"^(river|stream|canal)$"]["name"](around:${radiusM},${lat},${lon});out tags geom;`;
           const r = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`);
           if (!r.ok) continue;
           const d = await r.json();

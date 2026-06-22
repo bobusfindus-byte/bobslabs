@@ -256,6 +256,7 @@
       }
       .leaflet-pane,
       .leaflet-control { z-index: 1; }
+      .leaflet-tile-pane { filter: brightness(1.7) contrast(0.9); }
 
       /* ── State screens ── */
       .state-screen {
@@ -1284,8 +1285,8 @@
       }
 
       function spotTypeLabel(cur) {
-        if (cur.hasRiver) return '🏞️ River conditions';
         if (cur.hasMarine) return '🌊 Coastal conditions';
+        if (cur.hasRiver) return '🏞️ River conditions';
         return null;
       }
 

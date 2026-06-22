@@ -720,6 +720,12 @@
         if (!r.ok) throw new Error('Marine API error');
         const d = await r.json();
         if (!d.hourly || !d.hourly.wave_height) throw new Error('No marine data');
+        // The marine model snaps to the nearest ocean grid cell even when the
+        // requested point is far inland — treat anything beyond a plausible
+        // coastal-model offset as "no real sea nearby" rather than coastal.
+        if (d.latitude != null && d.longitude != null && haversineKm(lat, lon, d.latitude, d.longitude) > 50) {
+          throw new Error('Nearest marine data too far away — not a coastal spot');
+        }
         return d;
       }
 

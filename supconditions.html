@@ -434,6 +434,7 @@
         lon: null,
         weather: null,
         marine: null,
+        flood: null,
         tide: null,
         lastUpdated: null,
         errMsg: '',
@@ -569,6 +570,20 @@
         if (!r.ok) throw new Error('Marine API error');
         const d = await r.json();
         if (!d.hourly || !d.hourly.wave_height) throw new Error('No marine data');
+        return d;
+      }
+
+      // River discharge for inland spots (rivers, lakes fed by rivers) — global
+      // coverage via GloFAS, free, no key. Lets us flag fast/flooded current on
+      // rivers where the marine API has no open-water wave data at all.
+      async function loadFlood(lat, lon) {
+        const url =
+          `https://flood-api.open-meteo.com/v1/flood?latitude=${lat}&longitude=${lon}` +
+          `&daily=river_discharge,river_discharge_mean&forecast_days=3&timezone=auto`;
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('Flood API error');
+        const d = await r.json();
+        if (!d.daily || !d.daily.river_discharge) throw new Error('No flood data');
         return d;
       }
 
@@ -1018,8 +1033,28 @@
   <div class="stat-sub">${cur.precip != null ? `💧 ${cur.precip}% precip` : ''}</div>
 </div>`);
 
-        if (!cur.hasMarine) {
-          cards.push(`<div class="note-card">🌊 No open-water wave data for this spot — it may be inland or outside marine model coverage. Score is based on wind alone.</div>`);
+        if (cur.hasRiver) {
+          const ratio = cur.riverMean ? cur.riverDischarge / cur.riverMean : null;
+          let sub = 'Near seasonal average';
+          if (ratio != null) {
+            if (ratio >= 2) sub = '⚠️ Well above average — fast current';
+            else if (ratio >= 1.3) sub = 'Above average flow';
+            else if (ratio <= 0.6) sub = 'Below average flow';
+          }
+          cards.push(`<div class="stat-card">
+  <div class="stat-head">River Flow</div>
+  <div class="stat-value">${Math.round(cur.riverDischarge)} <span style="font-size:13px;font-weight:500;color:var(--text-dim)">m³/s</span></div>
+  <div class="stat-sub">${sub}</div>
+</div>`);
+          if (ratio != null && ratio >= 2) {
+            cards.push(`<div class="note-card">⚠️ River discharge is more than double its seasonal average — expect a much faster current and possible flood debris. Not a day for inexperienced paddlers.</div>`);
+          }
+        }
+
+        if (!cur.hasMarine && !cur.hasRiver) {
+          cards.push(`<div class="note-card">🌊 No open-water wave or river flow data for this spot — it may be a still lake or outside model coverage. Score is based on wind alone.</div>`);
+        } else if (!cur.hasMarine && cur.hasRiver) {
+          cards.push(`<div class="note-card">🏞️ Inland river spot — showing river flow instead of open-water swell. Score is based on wind alone; mind the current.</div>`);
         }
 
         return `<div class="stats-grid">${cards.join('')}</div>`;
@@ -1103,6 +1138,15 @@
           out.swellDir = mh.swell_wave_direction?.[mIdx];
           out.swellPeriod = mh.swell_wave_period?.[mIdx];
         }
+        if (S.flood) {
+          const fd = S.flood.daily;
+          const discharge = fd.river_discharge?.[0];
+          if (discharge != null) {
+            out.hasRiver = true;
+            out.riverDischarge = discharge;
+            out.riverMean = fd.river_discharge_mean?.[0];
+          }
+        }
         return out;
       }
 
@@ -1160,7 +1204,7 @@
   ${statsGrid(cur)}
   ${tideSection()}
   ${hourlySection(hourlyRows())}
-  <footer>Weather &amp; waves: Open-Meteo · Tides: ${S.tide && S.tide.source ? S.tide.source : 'NOAA CO-OPS / Admiralty UKHO'}<br>Conditions are a guide, not a safety guarantee — always check local advisories.</footer>
+  <footer>Weather, waves &amp; river flow: Open-Meteo · Tides: ${S.tide && S.tide.source ? S.tide.source : 'NOAA CO-OPS / Admiralty UKHO'}<br>Conditions are a guide, not a safety guarantee — always check local advisories.</footer>
 </div>`;
       }
 
@@ -1187,13 +1231,15 @@
         S.phase = 'loading';
         render();
         try {
-          const [weather, marine, tide] = await Promise.all([
+          const [weather, marine, flood, tide] = await Promise.all([
             loadWeather(lat, lon),
             loadMarine(lat, lon).catch(() => null),
+            loadFlood(lat, lon).catch(() => null),
             loadTide(lat, lon).catch(() => ({ status: 'unavailable' })),
           ]);
           S.weather = weather;
           S.marine = marine;
+          S.flood = flood;
           S.tide = tide;
           S.lat = lat;
           S.lon = lon;

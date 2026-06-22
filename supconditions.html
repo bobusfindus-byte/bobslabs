@@ -146,6 +146,29 @@
         padding-top: 10px;
         border-top: 1px solid var(--border);
       }
+      .locate-menu {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .locate-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 14px;
+        padding: 10px 13px;
+        cursor: pointer;
+        text-align: left;
+      }
+      .locate-menu-item:hover { border-color: var(--accent); }
       .settings-hint {
         font-size: 12.5px;
         color: var(--text-dim);
@@ -565,6 +588,7 @@
         lastUpdated: null,
         errMsg: '',
         settingsOpen: false,
+        locateMenuOpen: false,
       };
 
       // ── WMO codes ──────────────────────────────────────────────────────────────
@@ -945,6 +969,18 @@
       }
       function toggleSettings() {
         S.settingsOpen = !S.settingsOpen;
+        if (S.settingsOpen) S.locateMenuOpen = false;
+        render();
+      }
+
+      function toggleLocateMenu() {
+        S.locateMenuOpen = !S.locateMenuOpen;
+        if (S.locateMenuOpen) S.settingsOpen = false;
+        render();
+      }
+
+      function closeLocateMenu() {
+        S.locateMenuOpen = false;
         render();
       }
 
@@ -1216,15 +1252,23 @@
       <button class="pill-btn ${S.unit === 'metric' ? 'active' : ''}" onclick="setUnit('metric')">m</button>
       <button class="pill-btn ${S.unit === 'imperial' ? 'active' : ''}" onclick="setUnit('imperial')">ft</button>
     </div>
+    <button class="locate-btn ${hasProxy ? 'active' : ''}" onclick="toggleSettings()" title="Tide proxy settings">⚙</button>
   </div>
   <div class="search-row">
     <input class="search-input" id="si" type="search" placeholder="Search a beach or coastal town…" autocomplete="off" autocorrect="off" spellcheck="false">
     <button class="search-btn" onclick="doSearch()">Search</button>
-    <button class="locate-btn" onclick="openMapPicker()" title="Pick on map">🗺</button>
-    <button class="locate-btn" onclick="locate()">⌖</button>
-    <button class="locate-btn ${hasProxy ? 'active' : ''}" onclick="toggleSettings()" title="Tide proxy settings">⚙</button>
+    <button class="locate-btn ${S.locateMenuOpen ? 'active' : ''}" onclick="toggleLocateMenu()" title="Find by location">📍</button>
   </div>
+  ${locateMenu()}
   ${settingsPanel()}
+</div>`;
+      }
+
+      function locateMenu() {
+        if (!S.locateMenuOpen) return '';
+        return `<div class="locate-menu">
+  <button class="locate-menu-item" onclick="closeLocateMenu(); locate()">⌖ Use my current location</button>
+  <button class="locate-menu-item" onclick="closeLocateMenu(); openMapPicker()">🗺 Pick a spot on the map</button>
 </div>`;
       }
 

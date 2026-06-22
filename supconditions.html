@@ -637,8 +637,36 @@
 
       const SEWAGE_FEEDS = [
         {
+          company: 'Anglian Water',
+          url: 'https://services3.arcgis.com/VCOY1atHWVcDlvlJ/arcgis/rest/services/stream_service_outfall_locations_view/FeatureServer/0/query',
+        },
+        {
+          company: 'Northumbrian Water',
+          url: 'https://services-eu1.arcgis.com/MSNNjkZ51iVh8yBj/arcgis/rest/services/Northumbrian_Water_Storm_Overflow_Activity_2_view/FeatureServer/0/query',
+        },
+        {
           company: 'Severn Trent Water',
           url: 'https://services1.arcgis.com/NO7lTIlnxRMMG9Gw/arcgis/rest/services/Severn_Trent_Water_Storm_Overflow_Activity/FeatureServer/0/query',
+        },
+        {
+          company: 'Southern Water',
+          url: 'https://services-eu1.arcgis.com/6qJmARkS2dt2IjVA/arcgis/rest/services/SouthernWater_StormOverflowActivity_PROD_view/FeatureServer/0/query',
+        },
+        {
+          company: 'Thames Water',
+          url: 'https://services2.arcgis.com/g6o32ZDQ33GpCIu3/arcgis/rest/services/Thames_Water_Storm_Overflow_Activity_(Production)_view/FeatureServer/0/query',
+        },
+        {
+          company: 'United Utilities',
+          url: 'https://services5.arcgis.com/5eoLvR0f8HKb7HWP/arcgis/rest/services/United_Utilities_Storm_Overflow_Activity/FeatureServer/0/query',
+        },
+        {
+          company: 'Wessex Water',
+          url: 'https://services.arcgis.com/3SZ6e0uCvPROr4mS/arcgis/rest/services/Wessex_Water_Storm_Overflow_Activity/FeatureServer/0/query',
+        },
+        {
+          company: 'Yorkshire Water',
+          url: 'https://services-eu1.arcgis.com/1WqkK5cDKUbF0CkH/arcgis/rest/services/Yorkshire_Water_Storm_Overflow_Activity/FeatureServer/0/query',
         },
       ];
 
@@ -652,7 +680,9 @@
             const r = await fetch(url);
             if (!r.ok) return [];
             const d = await r.json();
-            return (d.features || []).map((f) => ({ ...f.properties, company: feed.company }));
+            return (d.features || [])
+              .filter((f) => f.properties?.Status != null && f.properties?.Latitude != null)
+              .map((f) => ({ ...f.properties, company: feed.company }));
           }),
         );
         const points = perFeed

@@ -173,15 +173,15 @@
         cursor: pointer;
         padding: 0;
       }
-      .key-toggle-btn {
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        color: var(--text-dim);
-        font-size: 15px;
-        padding: 0 11px;
-        cursor: pointer;
+      .proxy-test {
+        font-size: 12px;
+        line-height: 1.5;
+        min-height: 16px;
+        margin-top: 6px;
       }
+      .proxy-test.ok { color: #4ade80; }
+      .proxy-test.fail { color: #f87171; }
+      .proxy-test.warn { color: var(--amber, #f59e0b); }
 
       /* ── State screens ── */
       .state-screen {
@@ -639,27 +639,27 @@
         return { status: 'ok', stationName: station.name, dist: station.dist, series, hilo, source: 'NOAA CO-OPS' };
       }
 
-      // ── API: Admiralty UKHO tides (UK & international, needs a free key) ───────
-      const ADMIRALTY_BASE = 'https://admiraltyapi.azure-api.net/uktidalapi/api/V1';
-
-      function getAdmiraltyKey() {
+      // ── API: Admiralty UKHO tides (UK & international, via your own Cloudflare
+      // Worker proxy — Admiralty's API doesn't send CORS headers, so it can't be
+      // called directly from a browser; see workers/admiralty-proxy.js) ──────────
+      function getAdmiraltyProxyUrl() {
         try {
-          return localStorage.getItem('sup_admiralty_key') || '';
+          return (localStorage.getItem('sup_admiralty_proxy_url') || '').replace(/\/$/, '');
         } catch (e) {
           return '';
         }
       }
-      function saveAdmiraltyKey() {
-        const v = (document.getElementById('admiralty-key-input') || {}).value || '';
+      function saveAdmiraltyProxyUrl() {
+        const v = (document.getElementById('admiralty-proxy-input') || {}).value || '';
         try {
-          localStorage.setItem('sup_admiralty_key', v.trim());
+          localStorage.setItem('sup_admiralty_proxy_url', v.trim().replace(/\/$/, ''));
         } catch (e) {}
         if (S.lat != null) loadAll(S.lat, S.lon, S.locName);
         else render();
       }
-      function clearAdmiraltyKey() {
+      function clearAdmiraltyProxyUrl() {
         try {
-          localStorage.removeItem('sup_admiralty_key');
+          localStorage.removeItem('sup_admiralty_proxy_url');
         } catch (e) {}
         if (S.lat != null) loadAll(S.lat, S.lon, S.locName);
         else render();
@@ -668,12 +668,36 @@
         S.settingsOpen = !S.settingsOpen;
         render();
       }
-      function toggleAdmiraltyKeyVisibility() {
-        const input = document.getElementById('admiralty-key-input');
-        if (input) input.type = input.type === 'password' ? 'text' : 'password';
+
+      async function testAdmiraltyProxy() {
+        const url = (document.getElementById('admiralty-proxy-input') || {}).value.trim().replace(/\/$/, '');
+        const el = document.getElementById('admiralty-test-result');
+        if (!url) {
+          el.textContent = '⚠️ No URL entered';
+          el.className = 'proxy-test warn';
+          return;
+        }
+        el.textContent = 'Testing…';
+        el.className = 'proxy-test';
+        try {
+          const res = await fetch(`${url}/Stations`);
+          if (!res.ok) {
+            const body = await res.text().catch(() => '');
+            el.textContent = `✗ ${res.status}: ${body.slice(0, 200)}`;
+            el.className = 'proxy-test fail';
+            return;
+          }
+          const d = await res.json();
+          const count = (d.features || d.Features || []).length;
+          el.textContent = `✓ Proxy works — ${count} stations`;
+          el.className = 'proxy-test ok';
+        } catch (e) {
+          el.textContent = `✗ ${e.message}`;
+          el.className = 'proxy-test fail';
+        }
       }
 
-      async function fetchAdmiraltyStations(key) {
+      async function fetchAdmiraltyStations(proxyUrl) {
         const cacheKey = 'sup_admiralty_stations_v1';
         try {
           const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
@@ -681,11 +705,11 @@
         } catch (e) {}
         let r;
         try {
-          r = await fetch(`${ADMIRALTY_BASE}/Stations`, { headers: { 'Ocp-Apim-Subscription-Key': key } });
+          r = await fetch(`${proxyUrl}/Stations`);
         } catch (e) {
-          throw new Error('Could not reach the Admiralty API (network or CORS error)');
+          throw new Error('Could not reach the proxy worker (check the Proxy URL in settings)');
         }
-        if (r.status === 401 || r.status === 403) throw new Error('Admiralty API key was rejected (HTTP ' + r.status + ')');
+        if (r.status === 401 || r.status === 403) throw new Error('Proxy worker rejected the request (HTTP ' + r.status + ') — check its ADMIRALTY_KEY secret');
         if (!r.ok) throw new Error('Admiralty station list request failed (HTTP ' + r.status + ')');
         const d = await r.json();
         const features = d.features || d.Features || [];
@@ -707,8 +731,8 @@
         return stations;
       }
 
-      async function findNearestAdmiraltyStation(lat, lon, key) {
-        const stations = await fetchAdmiraltyStations(key);
+      async function findNearestAdmiraltyStation(lat, lon, proxyUrl) {
+        const stations = await fetchAdmiraltyStations(proxyUrl);
         let best = null, bestDist = Infinity;
         for (const s of stations) {
           const dist = haversineKm(lat, lon, s.lat, s.lon);
@@ -742,18 +766,17 @@
         return series;
       }
 
-      async function loadAdmiraltyTide(lat, lon, key) {
-        const station = await findNearestAdmiraltyStation(lat, lon, key);
+      async function loadAdmiraltyTide(lat, lon, proxyUrl) {
+        const station = await findNearestAdmiraltyStation(lat, lon, proxyUrl);
         if (!station) return { status: 'unavailable' };
-        const headers = { 'Ocp-Apim-Subscription-Key': key };
         let eventsRes;
         try {
-          eventsRes = await fetch(`${ADMIRALTY_BASE}/Stations/${station.id}/TidalEvents?duration=6`, { headers });
+          eventsRes = await fetch(`${proxyUrl}/Stations/${station.id}/TidalEvents?duration=6`);
         } catch (e) {
-          throw new Error('Could not reach the Admiralty API (network or CORS error)');
+          throw new Error('Could not reach the proxy worker (check the Proxy URL in settings)');
         }
         if (eventsRes.status === 401 || eventsRes.status === 403) {
-          throw new Error('Admiralty API key was rejected for TidalEvents (HTTP ' + eventsRes.status + ')');
+          throw new Error('Proxy worker rejected the request for TidalEvents (HTTP ' + eventsRes.status + ')');
         }
         if (!eventsRes.ok) throw new Error('Admiralty TidalEvents request failed (HTTP ' + eventsRes.status + ')');
         const events = await eventsRes.json();
@@ -781,16 +804,16 @@
           const noaa = await loadNoaaTide(lat, lon);
           if (noaa.status === 'ok') return noaa;
         } catch (e) {}
-        const key = getAdmiraltyKey();
-        if (key) {
+        const proxyUrl = getAdmiraltyProxyUrl();
+        if (proxyUrl) {
           try {
-            const adm = await loadAdmiraltyTide(lat, lon, key);
+            const adm = await loadAdmiraltyTide(lat, lon, proxyUrl);
             if (adm.status === 'ok') return adm;
           } catch (e) {
             return { status: 'unavailable', needsKey: false, admiraltyMsg: e.message };
           }
         }
-        return { status: 'unavailable', needsKey: !key };
+        return { status: 'unavailable', needsKey: !proxyUrl };
       }
 
       function interpAt(series, ms) {
@@ -906,7 +929,7 @@
 
       // ── HTML pieces ────────────────────────────────────────────────────────────
       function header() {
-        const hasKey = !!getAdmiraltyKey();
+        const hasProxy = !!getAdmiraltyProxyUrl();
         return `<div class="header">
   <div class="top-row">
     <span class="app-title">🏄 ${S.locName || 'SUP Conditions'}</span>
@@ -919,7 +942,7 @@
     <input class="search-input" id="si" type="search" placeholder="Search a beach or coastal town…" autocomplete="off" autocorrect="off" spellcheck="false">
     <button class="search-btn" onclick="doSearch()">Search</button>
     <button class="locate-btn" onclick="locate()">⌖</button>
-    <button class="locate-btn ${hasKey ? 'active' : ''}" onclick="toggleSettings()" title="Tide API key">⚙</button>
+    <button class="locate-btn ${hasProxy ? 'active' : ''}" onclick="toggleSettings()" title="Tide proxy settings">⚙</button>
   </div>
   ${settingsPanel()}
 </div>`;
@@ -927,18 +950,18 @@
 
       function settingsPanel() {
         if (!S.settingsOpen) return '';
-        const key = getAdmiraltyKey();
+        const url = getAdmiraltyProxyUrl();
         return `<div class="settings-panel">
-  <div class="settings-hint">NOAA covers US coastal tides for free, no key needed. Add a free <strong>Admiralty UKHO</strong> API key to unlock UK &amp; international tide predictions too.</div>
+  <div class="settings-hint">NOAA covers US coastal tides for free, no key needed. For UK &amp; international tides, deploy your own free <a href="https://admiraltyapi.developer.azure-api.net/" target="_blank" rel="noopener">Admiralty UKHO</a> key behind a Cloudflare Worker proxy (Admiralty's API has no CORS support, so it can't be called directly from the browser) — see <code>workers/admiralty-proxy.js</code> in the repo, then paste the worker URL below.</div>
   <div class="settings-row">
-    <input class="search-input" id="admiralty-key-input" type="password" placeholder="Admiralty API key" value="${key}" autocomplete="off" autocorrect="off" spellcheck="false">
-    <button class="key-toggle-btn" type="button" onclick="toggleAdmiraltyKeyVisibility()" title="Show/hide key">👁</button>
-    <button class="search-btn" onclick="saveAdmiraltyKey()">Save</button>
+    <input class="search-input" id="admiralty-proxy-input" type="url" placeholder="https://your-worker.workers.dev" value="${url}" autocomplete="off" autocorrect="off" spellcheck="false">
+    <button class="search-btn" onclick="saveAdmiraltyProxyUrl()">Save</button>
   </div>
-  <div class="settings-links">
-    <a href="https://admiraltyapi.developer.azure-api.net/" target="_blank" rel="noopener">Get a free key →</a>
-    ${key ? `<button class="link-btn" onclick="clearAdmiraltyKey()">Remove key</button>` : ''}
+  <div class="settings-row">
+    <button class="link-btn" onclick="testAdmiraltyProxy()">Test proxy</button>
+    ${url ? `<button class="link-btn" onclick="clearAdmiraltyProxyUrl()">Remove</button>` : ''}
   </div>
+  <div id="admiralty-test-result" class="proxy-test"></div>
 </div>`;
       }
 

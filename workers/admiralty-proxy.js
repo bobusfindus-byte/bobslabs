@@ -2,7 +2,9 @@
 // Admiralty's API doesn't send CORS headers, so a browser can't call it directly.
 // This worker forwards /Stations and /Stations/{id}/TidalEvents requests to the
 // Admiralty API, injecting the ADMIRALTY_KEY secret server-side so it never
-// touches the browser.
+// touches the browser. Only requests from ALLOWED_ORIGINS get a response, since
+// the worker URL itself is public (committed in supconditions.html) and would
+// otherwise let anyone burn through the free API quota.
 //
 // Setup:
 //   1. Create a Worker at dash.cloudflare.com → Workers & Pages → Create
@@ -12,16 +14,26 @@
 
 const ADMIRALTY_BASE = "https://admiraltyapi.azure-api.net/uktidalapi/api/V1";
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
+const ALLOWED_ORIGINS = ["https://bobusfindus-byte.github.io"];
+
+function corsHeaders(origin) {
+  return {
+    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin) ? origin : "null",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+}
 
 export default {
   async fetch(request, env) {
+    const origin = request.headers.get("Origin") || "";
+    const headers = corsHeaders(origin);
+
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: CORS });
+      return new Response(null, { status: 204, headers });
+    }
+    if (!ALLOWED_ORIGINS.includes(origin)) {
+      return new Response("Forbidden", { status: 403, headers });
     }
 
     const url = new URL(request.url);
@@ -32,7 +44,7 @@ export default {
     const body = await admRes.text();
     return new Response(body, {
       status: admRes.status,
-      headers: { "Content-Type": "application/json", ...CORS },
+      headers: { "Content-Type": "application/json", ...headers },
     });
   },
 };

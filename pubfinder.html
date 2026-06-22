@@ -718,8 +718,9 @@
       // Best-effort opening hours check
       // ── Foursquare ─────────────────────────────────────────────────────────────
       const PROXY_LS = "pubfinder_proxy_url";
+      const DEFAULT_PROXY_URL = "https://spring-sky-36b3.bobusfindus.workers.dev";
       function getProxyUrl() {
-        return localStorage.getItem(PROXY_LS) || "";
+        return localStorage.getItem(PROXY_LS) || DEFAULT_PROXY_URL;
       }
       function saveProxyUrl(u) {
         u
@@ -1176,7 +1177,7 @@ out center body;`;
     <button class="settings-test" onclick="testProxy()">Test</button>
   </div>
   <div id="fsq-test-result" class="fsq-test"></div>
-  <div class="settings-note">Paste your Cloudflare Worker URL — adds live hours, ratings &amp; Instagram. See workers/pubfinder-proxy.js in the repo to set up.</div>
+  <div class="settings-note">A default proxy is already wired up for live hours, ratings &amp; Instagram. Paste your own Cloudflare Worker URL to use that instead — see workers/pubfinder-proxy.js in the repo to set one up.</div>
 </div>`
           : "";
         return `<div class="header">

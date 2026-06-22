@@ -1536,7 +1536,7 @@
         // The marine API itself can't tell us how far the requested point is
         // from real open water, so only trust it as "coastal" when we know
         // (via OSM coastline lookup) the spot is actually near the sea.
-        const nearCoast = S.coastDistKm == null || S.coastDistKm <= 8;
+        const nearCoast = S.coastDistKm == null || S.coastDistKm <= 3;
         if (S.marine && nearCoast) {
           const mIdx = nearestIdx(S.marine.hourly.time);
           const mh = S.marine.hourly;

@@ -699,24 +699,38 @@
         return { ...best, dist: bestDist };
       }
 
+      // Discovery (free) tier only grants /TidalEvents (high/low points), not the
+      // Premium-only /TidalHeights series — so build a smooth curve ourselves via
+      // cosine interpolation between consecutive high/low extrema.
+      function interpolateHiloSeries(hilo, stepMinutes = 10) {
+        const sorted = [...hilo].sort((a, b) => a.t.getTime() - b.t.getTime());
+        const series = [];
+        for (let i = 0; i < sorted.length - 1; i++) {
+          const a = sorted[i], b = sorted[i + 1];
+          const durMs = b.t.getTime() - a.t.getTime();
+          if (durMs <= 0) continue;
+          const steps = Math.max(1, Math.round(durMs / (stepMinutes * 60 * 1000)));
+          for (let s = 0; s < steps; s++) {
+            const f = s / steps;
+            const cosF = (1 - Math.cos(f * Math.PI)) / 2;
+            series.push({ t: new Date(a.t.getTime() + f * durMs), v: a.v + (b.v - a.v) * cosF });
+          }
+        }
+        if (sorted.length) series.push({ t: sorted[sorted.length - 1].t, v: sorted[sorted.length - 1].v });
+        return series;
+      }
+
       async function loadAdmiraltyTide(lat, lon, key) {
         const station = await findNearestAdmiraltyStation(lat, lon, key);
         if (!station) return { status: 'unavailable' };
         const headers = { 'Ocp-Apim-Subscription-Key': key };
-        const [eventsRes, heightsRes] = await Promise.all([
-          fetch(`${ADMIRALTY_BASE}/Stations/${station.id}/TidalEvents?duration=3`, { headers }),
-          fetch(`${ADMIRALTY_BASE}/Stations/${station.id}/TidalHeights?duration=36&interval=15`, { headers }),
-        ]);
-        if (!eventsRes.ok || !heightsRes.ok) return { status: 'unavailable' };
+        const eventsRes = await fetch(`${ADMIRALTY_BASE}/Stations/${station.id}/TidalEvents?duration=6`, { headers });
+        if (!eventsRes.ok) return { status: 'unavailable' };
         const events = await eventsRes.json();
-        const heights = await heightsRes.json();
         const pick = (o, ...keys) => {
           for (const k of keys) if (o[k] !== undefined) return o[k];
           return undefined;
         };
-        const series = (Array.isArray(heights) ? heights : [])
-          .map((h) => ({ t: new Date(pick(h, 'DateTime', 'dateTime', 'Date')), v: parseFloat(pick(h, 'Height', 'height')) }))
-          .filter((p) => !isNaN(p.t.getTime()) && !isNaN(p.v));
         const hilo = (Array.isArray(events) ? events : [])
           .map((e) => {
             const type = pick(e, 'EventType', 'eventType') || '';
@@ -726,8 +740,9 @@
               type: /high/i.test(type) ? 'H' : 'L',
             };
           })
-          .filter((p) => !isNaN(p.t.getTime()));
-        if (series.length < 2) return { status: 'unavailable' };
+          .filter((p) => !isNaN(p.t.getTime()) && !isNaN(p.v));
+        if (hilo.length < 2) return { status: 'unavailable' };
+        const series = interpolateHiloSeries(hilo);
         return { status: 'ok', stationName: station.name, dist: station.dist, series, hilo, source: 'Admiralty UKHO' };
       }
 
@@ -888,7 +903,7 @@
     <button class="search-btn" onclick="saveAdmiraltyKey()">Save</button>
   </div>
   <div class="settings-links">
-    <a href="https://admiraltyapi.portal.azure-api.net/" target="_blank" rel="noopener">Get a free key →</a>
+    <a href="https://admiraltyapi.developer.azure-api.net/" target="_blank" rel="noopener">Get a free key →</a>
     ${key ? `<button class="link-btn" onclick="clearAdmiraltyKey()">Remove key</button>` : ''}
   </div>
 </div>`;

@@ -642,11 +642,12 @@
       // ── API: Admiralty UKHO tides (UK & international, via your own Cloudflare
       // Worker proxy — Admiralty's API doesn't send CORS headers, so it can't be
       // called directly from a browser; see workers/admiralty-proxy.js) ──────────
+      const DEFAULT_ADMIRALTY_PROXY = 'https://fancy-wave-8478.bobusfindus.workers.dev';
       function getAdmiraltyProxyUrl() {
         try {
-          return (localStorage.getItem('sup_admiralty_proxy_url') || '').replace(/\/$/, '');
+          return (localStorage.getItem('sup_admiralty_proxy_url') || DEFAULT_ADMIRALTY_PROXY).replace(/\/$/, '');
         } catch (e) {
-          return '';
+          return DEFAULT_ADMIRALTY_PROXY;
         }
       }
       function saveAdmiraltyProxyUrl() {
@@ -952,14 +953,14 @@
         if (!S.settingsOpen) return '';
         const url = getAdmiraltyProxyUrl();
         return `<div class="settings-panel">
-  <div class="settings-hint">NOAA covers US coastal tides for free, no key needed. For UK &amp; international tides, deploy your own free <a href="https://admiraltyapi.developer.azure-api.net/" target="_blank" rel="noopener">Admiralty UKHO</a> key behind a Cloudflare Worker proxy (Admiralty's API has no CORS support, so it can't be called directly from the browser) — see <code>workers/admiralty-proxy.js</code> in the repo, then paste the worker URL below.</div>
+  <div class="settings-hint">NOAA covers US coastal tides for free, no key needed. UK &amp; international tides go through a Cloudflare Worker proxy (Admiralty's API has no CORS support, so it can't be called directly from the browser) — a default proxy is already wired up, or deploy your own free <a href="https://admiraltyapi.developer.azure-api.net/" target="_blank" rel="noopener">Admiralty UKHO</a> key with <code>workers/admiralty-proxy.js</code> and paste its URL below to use that instead.</div>
   <div class="settings-row">
     <input class="search-input" id="admiralty-proxy-input" type="url" placeholder="https://your-worker.workers.dev" value="${url}" autocomplete="off" autocorrect="off" spellcheck="false">
     <button class="search-btn" onclick="saveAdmiraltyProxyUrl()">Save</button>
   </div>
   <div class="settings-row">
     <button class="link-btn" onclick="testAdmiraltyProxy()">Test proxy</button>
-    ${url ? `<button class="link-btn" onclick="clearAdmiraltyProxyUrl()">Remove</button>` : ''}
+    <button class="link-btn" onclick="clearAdmiraltyProxyUrl()">Reset to default</button>
   </div>
   <div id="admiralty-test-result" class="proxy-test"></div>
 </div>`;

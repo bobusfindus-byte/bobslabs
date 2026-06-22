@@ -672,13 +672,18 @@
           company: 'South West Water',
           url: 'https://services-eu1.arcgis.com/OMdMOtfhATJPcHe3/arcgis/rest/services/NEH_outlets_PROD/FeatureServer/0/query',
         },
+        {
+          company: 'Dŵr Cymru Welsh Water',
+          url: 'https://services3.arcgis.com/KLNF7YxtENPLYVey/arcgis/rest/services/Spill_Prod__view/FeatureServer/0/query',
+          transform: normalizeWelshWaterFeature,
+        },
       ];
 
       // Field casing varies between water companies (e.g. South West Water
       // uses lowercase keys) — normalize to PascalCase and always take the
       // position from GeoJSON geometry, since some feeds' Latitude/Longitude
       // properties are in a different projection (e.g. British National Grid).
-      function normalizeSewageFeature(f, company) {
+      function normalizeEdmFeature(f, company) {
         const p = f.properties || {};
         const [lon, lat] = f.geometry?.coordinates || [];
         const status = p.Status ?? p.status;
@@ -695,6 +700,29 @@
         };
       }
 
+      // Welsh Water built their own system rather than joining the EA's
+      // shared EDM hub — status is a free-text string and dates are ISO
+      // strings rather than epoch ms, so it needs its own mapping.
+      function normalizeWelshWaterFeature(f, company) {
+        const p = f.properties || {};
+        const [lon, lat] = f.geometry?.coordinates || [];
+        if (lat == null || !p.status) return null;
+        const low = p.status.toLowerCase();
+        const status = low.includes('not operating') ? 0 : low.includes('operating') ? 1 : -1;
+        const stopMs = p.stop_date_time_discharge ? new Date(p.stop_date_time_discharge).getTime() : null;
+        const startMs = p.start_date_time_discharge ? new Date(p.start_date_time_discharge).getTime() : null;
+        return {
+          company,
+          Status: status,
+          StatusStart: stopMs ?? startMs,
+          LatestEventStart: startMs,
+          LatestEventEnd: stopMs,
+          ReceivingWaterCourse: p.Receiving_Water,
+          Latitude: lat,
+          Longitude: lon,
+        };
+      }
+
       async function loadSewage(lat, lon) {
         const radiusKm = 15;
         const perFeed = await Promise.all(
@@ -705,8 +733,9 @@
             const r = await fetch(url);
             if (!r.ok) return [];
             const d = await r.json();
+            const normalize = feed.transform || normalizeEdmFeature;
             return (d.features || [])
-              .map((f) => normalizeSewageFeature(f, feed.company))
+              .map((f) => normalize(f, feed.company))
               .filter(Boolean);
           }),
         );

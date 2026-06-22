@@ -668,7 +668,32 @@
           company: 'Yorkshire Water',
           url: 'https://services-eu1.arcgis.com/1WqkK5cDKUbF0CkH/arcgis/rest/services/Yorkshire_Water_Storm_Overflow_Activity/FeatureServer/0/query',
         },
+        {
+          company: 'South West Water',
+          url: 'https://services-eu1.arcgis.com/OMdMOtfhATJPcHe3/arcgis/rest/services/NEH_outlets_PROD/FeatureServer/0/query',
+        },
       ];
+
+      // Field casing varies between water companies (e.g. South West Water
+      // uses lowercase keys) — normalize to PascalCase and always take the
+      // position from GeoJSON geometry, since some feeds' Latitude/Longitude
+      // properties are in a different projection (e.g. British National Grid).
+      function normalizeSewageFeature(f, company) {
+        const p = f.properties || {};
+        const [lon, lat] = f.geometry?.coordinates || [];
+        const status = p.Status ?? p.status;
+        if (status == null || lat == null) return null;
+        return {
+          company,
+          Status: status,
+          StatusStart: p.StatusStart ?? p.statusStart,
+          LatestEventStart: p.LatestEventStart ?? p.latestEventStart,
+          LatestEventEnd: p.LatestEventEnd ?? p.latestEventEnd,
+          ReceivingWaterCourse: p.ReceivingWaterCourse ?? p.receivingWaterCourse,
+          Latitude: lat,
+          Longitude: lon,
+        };
+      }
 
       async function loadSewage(lat, lon) {
         const radiusKm = 15;
@@ -681,8 +706,8 @@
             if (!r.ok) return [];
             const d = await r.json();
             return (d.features || [])
-              .filter((f) => f.properties?.Status != null && f.properties?.Latitude != null)
-              .map((f) => ({ ...f.properties, company: feed.company }));
+              .map((f) => normalizeSewageFeature(f, feed.company))
+              .filter(Boolean);
           }),
         );
         const points = perFeed

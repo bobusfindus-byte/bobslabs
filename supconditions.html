@@ -585,6 +585,7 @@
         flood: null,
         tide: null,
         sewage: null,
+        river: null,
         lastUpdated: null,
         errMsg: '',
         settingsOpen: false,
@@ -741,6 +742,29 @@
         const d = await r.json();
         if (!d.daily || !d.daily.river_discharge) throw new Error('No flood data');
         return d;
+      }
+
+      // Name of the nearest named river/stream, via OpenStreetMap Overpass —
+      // GloFAS gives flow numbers for a grid cell but no name, so this fills
+      // in "which river is this" for the inland-spot card. Free, no key.
+      async function loadNearestRiver(lat, lon) {
+        for (const radiusM of [3000, 10000, 25000]) {
+          const q = `[out:json][timeout:10];way["waterway"~"^(river|stream|canal)$"]["name"](around:${radiusM},${lat},${lon});out tags geom;`;
+          const r = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`);
+          if (!r.ok) continue;
+          const d = await r.json();
+          let best = null;
+          for (const el of d.elements || []) {
+            const elName = el.tags?.name;
+            if (!elName) continue;
+            for (const pt of el.geometry || []) {
+              const dist = haversineKm(lat, lon, pt.lat, pt.lon);
+              if (!best || dist < best.dist) best = { name: elName, dist };
+            }
+          }
+          if (best) return best;
+        }
+        return null;
       }
 
       // ── API: UK storm overflow / sewage discharge (Environment Agency EDM,
@@ -1400,10 +1424,11 @@
             else if (ratio >= 1.3) sub = 'Above average flow';
             else if (ratio <= 0.6) sub = 'Below average flow';
           }
+          const riverNote = S.river ? ` · ${titleCase(S.river.name)}, ${S.river.dist.toFixed(1)} km away` : '';
           cards.push(`<div class="stat-card">
   <div class="stat-head">River Flow</div>
   <div class="stat-value">${Math.round(cur.riverDischarge)} <span style="font-size:13px;font-weight:500;color:var(--text-dim)">m³/s</span></div>
-  <div class="stat-sub">${sub}</div>
+  <div class="stat-sub">${sub}${riverNote}</div>
 </div>`);
           if (ratio != null && ratio >= 2) {
             cards.push(`<div class="note-card">⚠️ River discharge is more than double its seasonal average — expect a much faster current and possible flood debris. Not a day for inexperienced paddlers.</div>`);
@@ -1591,18 +1616,20 @@
         S.phase = 'loading';
         render();
         try {
-          const [weather, marine, flood, tide, sewage] = await Promise.all([
+          const [weather, marine, flood, tide, sewage, river] = await Promise.all([
             loadWeather(lat, lon),
             loadMarine(lat, lon).catch(() => null),
             loadFlood(lat, lon).catch(() => null),
             loadTide(lat, lon).catch(() => ({ status: 'unavailable' })),
             loadSewage(lat, lon).catch(() => null),
+            loadNearestRiver(lat, lon).catch(() => null),
           ]);
           S.weather = weather;
           S.marine = marine;
           S.flood = flood;
           S.tide = tide;
           S.sewage = sewage;
+          S.river = river;
           S.lat = lat;
           S.lon = lon;
           S.locName = name;

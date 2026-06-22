@@ -173,6 +173,15 @@
         cursor: pointer;
         padding: 0;
       }
+      .key-toggle-btn {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text-dim);
+        font-size: 15px;
+        padding: 0 11px;
+        cursor: pointer;
+      }
 
       /* ── State screens ── */
       .state-screen {
@@ -659,6 +668,10 @@
         S.settingsOpen = !S.settingsOpen;
         render();
       }
+      function toggleAdmiraltyKeyVisibility() {
+        const input = document.getElementById('admiralty-key-input');
+        if (input) input.type = input.type === 'password' ? 'text' : 'password';
+      }
 
       async function fetchAdmiraltyStations(key) {
         const cacheKey = 'sup_admiralty_stations_v1';
@@ -666,8 +679,14 @@
           const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
           if (cached && Date.now() - cached.fetchedAt < 30 * 24 * 3600 * 1000) return cached.stations;
         } catch (e) {}
-        const r = await fetch(`${ADMIRALTY_BASE}/Stations`, { headers: { 'Ocp-Apim-Subscription-Key': key } });
-        if (!r.ok) throw new Error('Admiralty station list failed');
+        let r;
+        try {
+          r = await fetch(`${ADMIRALTY_BASE}/Stations`, { headers: { 'Ocp-Apim-Subscription-Key': key } });
+        } catch (e) {
+          throw new Error('Could not reach the Admiralty API (network or CORS error)');
+        }
+        if (r.status === 401 || r.status === 403) throw new Error('Admiralty API key was rejected (HTTP ' + r.status + ')');
+        if (!r.ok) throw new Error('Admiralty station list request failed (HTTP ' + r.status + ')');
         const d = await r.json();
         const features = d.features || d.Features || [];
         const stations = features
@@ -695,7 +714,10 @@
           const dist = haversineKm(lat, lon, s.lat, s.lon);
           if (dist < bestDist) { bestDist = dist; best = s; }
         }
-        if (!best || bestDist > 60) return null;
+        if (!best) throw new Error('Admiralty returned no station list (check the API response shape)');
+        if (bestDist > 60) {
+          throw new Error(`Nearest Admiralty station (${best.name}) is ${bestDist.toFixed(0)}km away — outside the 60km range`);
+        }
         return { ...best, dist: bestDist };
       }
 
@@ -724,8 +746,16 @@
         const station = await findNearestAdmiraltyStation(lat, lon, key);
         if (!station) return { status: 'unavailable' };
         const headers = { 'Ocp-Apim-Subscription-Key': key };
-        const eventsRes = await fetch(`${ADMIRALTY_BASE}/Stations/${station.id}/TidalEvents?duration=6`, { headers });
-        if (!eventsRes.ok) return { status: 'unavailable' };
+        let eventsRes;
+        try {
+          eventsRes = await fetch(`${ADMIRALTY_BASE}/Stations/${station.id}/TidalEvents?duration=6`, { headers });
+        } catch (e) {
+          throw new Error('Could not reach the Admiralty API (network or CORS error)');
+        }
+        if (eventsRes.status === 401 || eventsRes.status === 403) {
+          throw new Error('Admiralty API key was rejected for TidalEvents (HTTP ' + eventsRes.status + ')');
+        }
+        if (!eventsRes.ok) throw new Error('Admiralty TidalEvents request failed (HTTP ' + eventsRes.status + ')');
         const events = await eventsRes.json();
         const pick = (o, ...keys) => {
           for (const k of keys) if (o[k] !== undefined) return o[k];
@@ -741,7 +771,7 @@
             };
           })
           .filter((p) => !isNaN(p.t.getTime()) && !isNaN(p.v));
-        if (hilo.length < 2) return { status: 'unavailable' };
+        if (hilo.length < 2) throw new Error('Admiralty station found but returned no usable tide events');
         const series = interpolateHiloSeries(hilo);
         return { status: 'ok', stationName: station.name, dist: station.dist, series, hilo, source: 'Admiralty UKHO' };
       }
@@ -756,7 +786,9 @@
           try {
             const adm = await loadAdmiraltyTide(lat, lon, key);
             if (adm.status === 'ok') return adm;
-          } catch (e) {}
+          } catch (e) {
+            return { status: 'unavailable', needsKey: false, admiraltyMsg: e.message };
+          }
         }
         return { status: 'unavailable', needsKey: !key };
       }
@@ -899,7 +931,8 @@
         return `<div class="settings-panel">
   <div class="settings-hint">NOAA covers US coastal tides for free, no key needed. Add a free <strong>Admiralty UKHO</strong> API key to unlock UK &amp; international tide predictions too.</div>
   <div class="settings-row">
-    <input class="search-input" id="admiralty-key-input" type="text" placeholder="Admiralty API key" value="${key}" autocomplete="off" autocorrect="off" spellcheck="false">
+    <input class="search-input" id="admiralty-key-input" type="password" placeholder="Admiralty API key" value="${key}" autocomplete="off" autocorrect="off" spellcheck="false">
+    <button class="key-toggle-btn" type="button" onclick="toggleAdmiraltyKeyVisibility()" title="Show/hide key">👁</button>
     <button class="search-btn" onclick="saveAdmiraltyKey()">Save</button>
   </div>
   <div class="settings-links">
@@ -972,7 +1005,7 @@
         const tide = S.tide;
         if (!tide || tide.status !== 'ok') {
           const note = tide && tide.needsKey === false
-            ? '🌊 No tide station found near this location in either the NOAA or Admiralty network.'
+            ? `🌊 ${tide.admiraltyMsg || 'No tide station found near this location in either the NOAA or Admiralty network.'}`
             : `🌍 Live tide predictions need a nearby station. NOAA covers US coasts for free — for UK &amp; international tides, add a free Admiralty API key via <button class="link-btn" onclick="toggleSettings()">settings ⚙</button>.`;
           return `<div class="section">
   <div class="section-title">Tides</div>

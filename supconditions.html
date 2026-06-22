@@ -328,6 +328,17 @@
         border-color: rgba(251, 191, 36, 0.35);
       }
       .sewage-caution .sewage-title { color: var(--caution); }
+      .sewage-clear {
+        background: rgba(52, 211, 153, 0.08);
+        border-color: rgba(52, 211, 153, 0.3);
+      }
+      .sewage-clear .sewage-title { color: var(--great); }
+      .sewage-unknown {
+        background: var(--surface);
+        border-color: var(--border);
+        border-style: dashed;
+      }
+      .sewage-unknown .sewage-title { color: var(--text-dim); }
       .note-card {
         grid-column: 1 / -1;
         background: var(--surface);
@@ -620,6 +631,10 @@
       // 0 not discharging / 1 discharging). Only Severn Trent's feed is wired
       // up so far — add more entries here once their FeatureServer URLs are
       // confirmed.
+      function isLikelyUK(lat, lon) {
+        return lat >= 49.8 && lat <= 60.9 && lon >= -8.6 && lon <= 1.8;
+      }
+
       const SEWAGE_FEEDS = [
         {
           company: 'Severn Trent Water',
@@ -1063,22 +1078,43 @@
 
       function sewageCard() {
         const s = S.sewage;
-        if (!s) return '';
-        const where = `${s.dist.toFixed(1)} km away on the ${titleCase(s.ReceivingWaterCourse) || 'nearby watercourse'}`;
-        if (s.Status === 1) {
-          return `<div class="sewage-card sewage-active">
+        if (s) {
+          const where = `${s.dist.toFixed(1)} km away on the ${titleCase(s.ReceivingWaterCourse) || 'nearby watercourse'}`;
+          if (s.Status === 1) {
+            return `<div class="sewage-card sewage-active">
   <div class="sewage-title">🚱 Storm overflow discharging</div>
   <div class="sewage-body">${s.company} reports an active discharge ${where}. Avoid paddling near this outflow.</div>
 </div>`;
-        }
-        const hoursSince = s.LatestEventEnd ? (Date.now() - s.LatestEventEnd) / 36e5 : null;
-        if (s.Status === 0 && hoursSince != null && hoursSince < 48) {
-          return `<div class="sewage-card sewage-caution">
+          }
+          const hoursSince = s.LatestEventEnd ? (Date.now() - s.LatestEventEnd) / 36e5 : null;
+          if (s.Status === 0 && hoursSince != null && hoursSince < 48) {
+            return `<div class="sewage-card sewage-caution">
   <div class="sewage-title">⚠️ Recent storm overflow</div>
   <div class="sewage-body">${s.company} reports a discharge stopped ${Math.round(hoursSince)}h ago ${where}. Water quality may still be affected.</div>
 </div>`;
+          }
+          if (s.Status === 0) {
+            return `<div class="sewage-card sewage-clear">
+  <div class="sewage-title">✅ No storm overflow discharging</div>
+  <div class="sewage-body">Nearest monitored outflow (${s.company}, ${where}) is not currently active.</div>
+</div>`;
+          }
+          // Status -1 (monitor offline) — fall through to the coverage note
+          // below rather than asserting a status we can't confirm.
+        }
+        if (S.lat != null && isLikelyUK(S.lat, S.lon)) {
+          return `<div class="sewage-card sewage-unknown">
+  <div class="sewage-title">ℹ️ Storm overflow status unknown</div>
+  <div class="sewage-body">No reliable monitoring data for this spot — only Severn Trent Water's network is covered so far.</div>
+</div>`;
         }
         return '';
+      }
+
+      function spotTypeLabel(cur) {
+        if (cur.hasRiver) return '🏞️ River conditions';
+        if (cur.hasMarine) return '🌊 Coastal conditions';
+        return null;
       }
 
       function verdictCard(score, locParts) {
@@ -1300,7 +1336,7 @@
         const updated = S.lastUpdated ? `Updated ${fmtClock(S.lastUpdated)}` : '';
 
         return `<div class="content">
-  ${verdictCard(score, [S.locName, updated].filter(Boolean).join(' · '))}
+  ${verdictCard(score, [spotTypeLabel(cur), S.locName, updated].filter(Boolean).join(' · '))}
   ${sewageCard()}
   ${statsGrid(cur)}
   ${tideSection()}

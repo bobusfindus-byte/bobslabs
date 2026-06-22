@@ -586,6 +586,7 @@
         tide: null,
         sewage: null,
         river: null,
+        coastDistKm: null,
         lastUpdated: null,
         errMsg: '',
         settingsOpen: false,
@@ -721,13 +722,34 @@
         if (!r.ok) throw new Error('Marine API error');
         const d = await r.json();
         if (!d.hourly || !d.hourly.wave_height) throw new Error('No marine data');
-        // The marine model snaps to the nearest ocean grid cell even when the
-        // requested point is far inland — treat anything beyond a plausible
-        // coastal-model offset as "no real sea nearby" rather than coastal.
-        if (d.latitude != null && d.longitude != null && haversineKm(lat, lon, d.latitude, d.longitude) > 50) {
-          throw new Error('Nearest marine data too far away — not a coastal spot');
-        }
         return d;
+      }
+
+      // The marine API snaps to the nearest ocean grid cell and returns wave
+      // data even when the requested point is far inland, and it doesn't
+      // report how far away that cell actually is — so we can't tell from
+      // its response alone whether a spot is really coastal. Check distance
+      // to the nearest mapped coastline (OpenStreetMap Overpass) instead.
+      async function loadCoastDistanceKm(lat, lon) {
+        let queriedOk = false;
+        let best = null;
+        for (const radiusM of [5000, 20000, 60000, 150000]) {
+          const q = `[out:json][timeout:15];way["natural"="coastline"](around:${radiusM},${lat},${lon});out geom;`;
+          const r = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`);
+          if (!r.ok) continue;
+          queriedOk = true;
+          const d = await r.json();
+          for (const el of d.elements || []) {
+            for (const pt of el.geometry || []) {
+              const dist = haversineKm(lat, lon, pt.lat, pt.lon);
+              if (best == null || dist < best) best = dist;
+            }
+          }
+          if (best != null) break;
+        }
+        if (best != null) return best;
+        if (queriedOk) return Infinity; // searched out to 150km, found no coastline — truly inland
+        throw new Error('Coastline lookup failed');
       }
 
       // River discharge for inland spots (rivers, lakes fed by rivers) — global
@@ -1511,7 +1533,11 @@
           precip: w.hourly.precipitation_probability?.[idx],
           hasMarine: false,
         };
-        if (S.marine) {
+        // The marine API itself can't tell us how far the requested point is
+        // from real open water, so only trust it as "coastal" when we know
+        // (via OSM coastline lookup) the spot is actually near the sea.
+        const nearCoast = S.coastDistKm == null || S.coastDistKm <= 8;
+        if (S.marine && nearCoast) {
           const mIdx = nearestIdx(S.marine.hourly.time);
           const mh = S.marine.hourly;
           out.hasMarine = true;
@@ -1616,13 +1642,14 @@
         S.phase = 'loading';
         render();
         try {
-          const [weather, marine, flood, tide, sewage, river] = await Promise.all([
+          const [weather, marine, flood, tide, sewage, river, coastDistKm] = await Promise.all([
             loadWeather(lat, lon),
             loadMarine(lat, lon).catch(() => null),
             loadFlood(lat, lon).catch(() => null),
             loadTide(lat, lon).catch(() => ({ status: 'unavailable' })),
             loadSewage(lat, lon).catch(() => null),
             loadNearestRiver(lat, lon).catch(() => null),
+            loadCoastDistanceKm(lat, lon).catch(() => null),
           ]);
           S.weather = weather;
           S.marine = marine;
@@ -1630,6 +1657,7 @@
           S.tide = tide;
           S.sewage = sewage;
           S.river = river;
+          S.coastDistKm = coastDistKm;
           S.lat = lat;
           S.lon = lon;
           S.locName = name;

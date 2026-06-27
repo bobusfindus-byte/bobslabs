@@ -586,11 +586,13 @@
         return WMO[code] || { l: 'Unknown', e: '🌡' };
       }
 
-      // Downgrade severe WMO codes when precipitation probability doesn't back them up.
-      // Open-Meteo tends to assign high severity codes even at low probability, which
-      // makes "Thunderstorm all day" forecasts when it's actually just overcast.
-      function effectiveCode(code, pp) {
-        if (code >= 95 && pp < 40) return 3;  // thunder needs ≥40% precip prob
+      // Downgrade severe WMO codes when the data doesn't back them up.
+      // lp = lightning_potential (J/kg from ECMWF LPI); null when unavailable.
+      function effectiveCode(code, pp, lp) {
+        if (code >= 95) {
+          if (pp < 40) return 3;              // thunder needs ≥40% precip prob
+          if (lp != null && lp < 1) return 3; // no atmospheric instability
+        }
         if (code >= 80 && pp < 25) return 3;  // showers need ≥25%
         if (code >= 61 && pp < 20) return 3;  // light rain needs ≥20%
         return code;
@@ -643,7 +645,7 @@
                 ? 'this evening'
                 : 'tonight';
         const heavy = Math.max(...ahead.map((h) => h.pp)) > 70 ? ' — could be heavy' : '';
-        return `${wmo(effectiveCode(rainY[0].c, rainY[0].pp)).l} expected ${when}${heavy}.`;
+        return `${wmo(effectiveCode(rainY[0].c, rainY[0].pp, rainY[0].lp)).l} expected ${when}${heavy}.`;
       }
 
       // ── Hyperlocal: Dark Sky–style "Rain in X min" from minutely_15 ───────────
@@ -674,57 +676,102 @@
         }
       }
 
-      // ── Fetch weather from Open-Meteo ──────────────────────────────────────────
+      // ── Fetch weather — ECMWF backbone + Met Office UKV overlay ──────────────
+      // Three parallel calls:
+      //   1. ECMWF IFS 0.25° — full 7-day hourly with ensemble precip probability
+      //      and lightning potential index. Reliable probabilistic data.
+      //   2. Met Office UKV 2km — 0–48h only. Higher resolution for UK; overrides
+      //      ECMWF temperature/wind/code for the near term. Graceful-fail safe.
+      //   3. Open-Meteo best_match minutely_15 — 15-min nowcast for "rain in X min".
       async function loadWeather(lat, lon) {
-        const url =
-          'https://api.open-meteo.com/v1/forecast' +
-          '?latitude=' +
-          lat +
-          '&longitude=' +
-          lon +
-          '&hourly=temperature_2m,apparent_temperature,precipitation_probability,weathercode,windspeed_10m,relativehumidity_2m,is_day' +
+        const base = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon;
+
+        const ecmwfUrl = base +
+          '&hourly=temperature_2m,apparent_temperature,precipitation_probability,weathercode,' +
+          'windspeed_10m,relativehumidity_2m,is_day,lightning_potential' +
           '&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset' +
-          '&minutely_15=precipitation,weathercode' +
-          '&wind_speed_unit=mph&timezone=auto&forecast_days=7';
+          '&models=ecmwf_ifs025&wind_speed_unit=mph&timezone=auto&forecast_days=7';
 
-        const r = await fetch(url);
-        if (!r.ok) throw new Error('Weather fetch failed: ' + r.status);
-        const d = await r.json();
+        // UKV provides physical fields only — no ensemble probability available from deterministic run
+        const ukvUrl = base +
+          '&hourly=temperature_2m,apparent_temperature,weathercode,windspeed_10m' +
+          '&models=ukmo_uk_deterministic_2km&wind_speed_unit=mph&timezone=auto&forecast_days=2';
 
-        const hours = d.hourly.time.map((t, i) => ({
+        // Nowcast uses best_match since ECMWF has no sub-hourly data
+        const nowcastUrl = base +
+          '&minutely_15=precipitation,weathercode&timezone=auto&forecast_days=1';
+
+        const [ecmwfRes, ukvRes, nowcastRes] = await Promise.allSettled([
+          fetch(ecmwfUrl), fetch(ukvUrl), fetch(nowcastUrl),
+        ]);
+
+        if (ecmwfRes.status !== 'fulfilled' || !ecmwfRes.value.ok)
+          throw new Error('Weather fetch failed');
+        const ed = await ecmwfRes.value.json();
+
+        // ECMWF hourly — backbone for all 7 days; includes lp (lightning potential, J/kg)
+        const ecmwfHours = ed.hourly.time.map((t, i) => ({
           t,
-          temp: d.hourly.temperature_2m[i],
-          feels: d.hourly.apparent_temperature[i],
-          pp: d.hourly.precipitation_probability[i] ?? 0,
-          c: d.hourly.weathercode[i],
-          wind: d.hourly.windspeed_10m[i],
-          hum: d.hourly.relativehumidity_2m[i],
-          isDay: d.hourly.is_day[i] === 1,
-        }));
-        const m15 =
-          d.minutely_15 && d.minutely_15.time
-            ? d.minutely_15.time.map((t, i) => ({
-                t,
-                precip: d.minutely_15.precipitation[i] ?? 0,
-                c: d.minutely_15.weathercode[i],
-              }))
-            : [];
-        const days = d.daily.time.map((t, i) => ({
-          t,
-          c: d.daily.weathercode[i],
-          hi: d.daily.temperature_2m_max[i],
-          lo: d.daily.temperature_2m_min[i],
-          ppMax: d.daily.precipitation_probability_max[i] ?? 0,
-          sunrise: d.daily.sunrise[i],
-          sunset: d.daily.sunset[i],
+          temp:  ed.hourly.temperature_2m[i],
+          feels: ed.hourly.apparent_temperature[i],
+          pp:    ed.hourly.precipitation_probability[i] ?? 0,
+          c:     ed.hourly.weathercode[i],
+          wind:  ed.hourly.windspeed_10m[i],
+          hum:   ed.hourly.relativehumidity_2m[i],
+          isDay: ed.hourly.is_day[i] === 1,
+          lp:    ed.hourly.lightning_potential?.[i] ?? null,
         }));
 
-        // Replace Open-Meteo's worst-case daily code with the modal effective code
-        // computed from daytime hourly slots. This stops a single low-probability
-        // thunderstorm hour from making the entire day card show ⛈.
+        // UKV overlay — override physical fields for matching 0–48h timestamps
+        const ukvMap = new Map();
+        if (ukvRes.status === 'fulfilled' && ukvRes.value.ok) {
+          try {
+            const ud = await ukvRes.value.json();
+            ud.hourly.time.forEach((t, i) => ukvMap.set(t, {
+              temp:  ud.hourly.temperature_2m[i],
+              feels: ud.hourly.apparent_temperature[i],
+              c:     ud.hourly.weathercode[i],
+              wind:  ud.hourly.windspeed_10m[i],
+            }));
+          } catch (e) { console.warn('UKV parse failed, ECMWF only:', e); }
+        }
+
+        // Merge: ECMWF as base, UKV overrides temp/feels/code/wind where available.
+        // Precipitation probability and lightning_potential always from ECMWF.
+        const hours = ecmwfHours.map(h => {
+          const ukv = ukvMap.get(h.t);
+          return ukv ? { ...h, temp: ukv.temp, feels: ukv.feels, c: ukv.c, wind: ukv.wind } : h;
+        });
+
+        // Nowcast minutely_15
+        let m15 = [];
+        if (nowcastRes.status === 'fulfilled' && nowcastRes.value.ok) {
+          try {
+            const nd = await nowcastRes.value.json();
+            m15 = nd.minutely_15?.time
+              ? nd.minutely_15.time.map((t, i) => ({
+                  t,
+                  precip: nd.minutely_15.precipitation[i] ?? 0,
+                  c:      nd.minutely_15.weathercode[i],
+                }))
+              : [];
+          } catch (e) { console.warn('Nowcast parse failed:', e); }
+        }
+
+        const days = ed.daily.time.map((t, i) => ({
+          t,
+          c:      ed.daily.weathercode[i],
+          hi:     ed.daily.temperature_2m_max[i],
+          lo:     ed.daily.temperature_2m_min[i],
+          ppMax:  ed.daily.precipitation_probability_max[i] ?? 0,
+          sunrise: ed.daily.sunrise[i],
+          sunset:  ed.daily.sunset[i],
+        }));
+
+        // Replace worst-case daily code with modal effective code from daytime hourly slots
         days.forEach(day => {
           const sunriseH = day.sunrise ? parseInt(day.sunrise.split('T')[1]) : 6;
-          const sunsetH = day.sunset ? parseInt(day.sunset.split('T')[1]) : 21;
+          const sunsetH  = day.sunset  ? parseInt(day.sunset.split('T')[1])  : 21;
           const src = hours.filter(h => {
             if (!h.t.startsWith(day.t)) return false;
             const hh = parseInt(h.t.split('T')[1]);
@@ -733,7 +780,7 @@
           if (!src.length) return;
           const freq = {};
           src.forEach(h => {
-            const c = effectiveCode(h.c, h.pp);
+            const c = effectiveCode(h.c, h.pp, h.lp);
             freq[c] = (freq[c] || 0) + 1;
           });
           day.c = parseInt(Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0]);
@@ -896,7 +943,7 @@
         const cur = isToday
           ? dayHours.find((h) => h.t === nowH) || dayHours[0]
           : dayHours[Math.min(11, dayHours.length - 1)];
-        const info = wmo(effectiveCode(cur.c, cur.pp));
+        const info = wmo(effectiveCode(cur.c, cur.pp, cur.lp));
 
         // Gradient stops for the bar
         const stops = dayHours.map((h, i) => {
@@ -967,7 +1014,7 @@ ${hyperlocalMsg ? `<div class="hyperlocal">${hyperlocalMsg}</div>` : ''}
       const isNow = isToday && h.t === nowH;
       const isSleeping = hh < sunriseH || hh > sunsetH;
       const tl = hh === 0 ? '12am' : hh < 12 ? hh + 'am' : hh === 12 ? '12pm' : hh - 12 + 'pm';
-      const w = wmo(effectiveCode(h.c, h.pp));
+      const w = wmo(effectiveCode(h.c, h.pp, h.lp));
       return `<div class="hour-row${isNow ? ' now' : ''}${isSleeping && !isNow ? ' dim' : ''}">
       <span class="h-time">${isNow ? '▶ Now' : tl}</span>
       <span class="h-cond">${w.e} ${w.l}</span>

@@ -595,6 +595,7 @@
         }
         if (code >= 80 && pp < 25) return 3;  // showers need ≥25%
         if (code >= 61 && pp < 20) return 3;  // light rain needs ≥20%
+        if (code >= 51 && code <= 55 && pp < 15) return 3;  // drizzle needs ≥15%
         return code;
       }
 

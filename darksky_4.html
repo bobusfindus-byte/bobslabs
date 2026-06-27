@@ -586,6 +586,16 @@
         return WMO[code] || { l: 'Unknown', e: '🌡' };
       }
 
+      // Downgrade severe WMO codes when precipitation probability doesn't back them up.
+      // Open-Meteo tends to assign high severity codes even at low probability, which
+      // makes "Thunderstorm all day" forecasts when it's actually just overcast.
+      function effectiveCode(code, pp) {
+        if (code >= 95 && pp < 40) return 3;  // thunder needs ≥40% precip prob
+        if (code >= 80 && pp < 25) return 3;  // showers need ≥25%
+        if (code >= 61 && pp < 20) return 3;  // light rain needs ≥20%
+        return code;
+      }
+
       // ── Temp conversion ────────────────────────────────────────────────────────
       function T(c) {
         return S.unit === 'C' ? Math.round(c) + '°' : Math.round((c * 9) / 5 + 32) + '°';
@@ -633,7 +643,7 @@
                 ? 'this evening'
                 : 'tonight';
         const heavy = Math.max(...ahead.map((h) => h.pp)) > 70 ? ' — could be heavy' : '';
-        return `${wmo(rainY[0].c).l} expected ${when}${heavy}.`;
+        return `${wmo(effectiveCode(rainY[0].c, rainY[0].pp)).l} expected ${when}${heavy}.`;
       }
 
       // ── Hyperlocal: Dark Sky–style "Rain in X min" from minutely_15 ───────────
@@ -708,6 +718,27 @@
           sunrise: d.daily.sunrise[i],
           sunset: d.daily.sunset[i],
         }));
+
+        // Replace Open-Meteo's worst-case daily code with the modal effective code
+        // computed from daytime hourly slots. This stops a single low-probability
+        // thunderstorm hour from making the entire day card show ⛈.
+        days.forEach(day => {
+          const sunriseH = day.sunrise ? parseInt(day.sunrise.split('T')[1]) : 6;
+          const sunsetH = day.sunset ? parseInt(day.sunset.split('T')[1]) : 21;
+          const src = hours.filter(h => {
+            if (!h.t.startsWith(day.t)) return false;
+            const hh = parseInt(h.t.split('T')[1]);
+            return hh >= sunriseH && hh <= sunsetH;
+          });
+          if (!src.length) return;
+          const freq = {};
+          src.forEach(h => {
+            const c = effectiveCode(h.c, h.pp);
+            freq[c] = (freq[c] || 0) + 1;
+          });
+          day.c = parseInt(Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0]);
+        });
+
         return { hours, days, m15 };
       }
 
@@ -865,7 +896,7 @@
         const cur = isToday
           ? dayHours.find((h) => h.t === nowH) || dayHours[0]
           : dayHours[Math.min(11, dayHours.length - 1)];
-        const info = wmo(cur.c);
+        const info = wmo(effectiveCode(cur.c, cur.pp));
 
         // Gradient stops for the bar
         const stops = dayHours.map((h, i) => {
@@ -936,7 +967,7 @@ ${hyperlocalMsg ? `<div class="hyperlocal">${hyperlocalMsg}</div>` : ''}
       const isNow = isToday && h.t === nowH;
       const isSleeping = hh < sunriseH || hh > sunsetH;
       const tl = hh === 0 ? '12am' : hh < 12 ? hh + 'am' : hh === 12 ? '12pm' : hh - 12 + 'pm';
-      const w = wmo(h.c);
+      const w = wmo(effectiveCode(h.c, h.pp));
       return `<div class="hour-row${isNow ? ' now' : ''}${isSleeping && !isNow ? ' dim' : ''}">
       <span class="h-time">${isNow ? '▶ Now' : tl}</span>
       <span class="h-cond">${w.e} ${w.l}</span>

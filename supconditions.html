@@ -621,6 +621,41 @@
         return WMO[c] || WMO[0];
       }
 
+      // Downgrade severe WMO codes when the data doesn't back them up.
+      // lp = lightning_potential (J/kg from ECMWF LPI); null when unavailable.
+      function effectiveCode(code, pp, lp) {
+        if (code >= 95) {
+          if (pp < 40) return 3;              // thunder needs ≥40% precip prob
+          if (lp != null && lp < 1) return 3; // no atmospheric instability
+        }
+        if (code >= 80 && pp < 25) return 3;  // showers need ≥25%
+        if (code >= 61 && pp < 20) return 3;  // light rain needs ≥20%
+        return code;
+      }
+
+      // Dark Sky–style "Rain in X min" from minutely_15 nowcast.
+      function makeHyperlocal(nowcast) {
+        if (!nowcast || !nowcast.length) return null;
+        const now = new Date();
+        const upcoming = nowcast.filter((m) => new Date(m.t) > now).slice(0, 8);
+        if (!upcoming.length) return null;
+        const wet = (m) => m.precip >= 0.1;
+        const currentlyWet = wet(upcoming[0]);
+        if (currentlyWet) {
+          const clearsAt = upcoming.findIndex((m) => !wet(m));
+          if (clearsAt === -1) return '🌧 Precipitation continuing for the next 2 hours.';
+          const mins = clearsAt * 15;
+          return mins <= 15 ? '🌧 Precipitation clearing very soon.' : `🌧 Precipitation clearing in about ${mins} min.`;
+        } else {
+          const startsAt = upcoming.findIndex(wet);
+          if (startsAt === -1) return null;
+          const mins = startsAt * 15;
+          const label = wmo(upcoming[startsAt].c).l;
+          if (mins === 0) return `🌧 ${label} starting now.`;
+          return mins <= 15 ? `🌧 ${label} starting very soon.` : `🌧 ${label} starting in about ${mins} min.`;
+        }
+      }
+
       // ── Unit formatting ───────────────────────────────────────────────────────
       const imp = () => S.unit === 'imperial';
       function fmtTemp(c) {
@@ -702,15 +737,85 @@
         return d.toISOString().slice(0, 10).replace(/-/g, '');
       }
 
-      // ── API: weather + marine ─────────────────────────────────────────────────
+      // ── API: weather — ECMWF backbone + Met Office UKV overlay ──────────────
+      // Three parallel calls:
+      //   1. ECMWF IFS 0.25° — 2-day hourly with ensemble precip probability
+      //      and lightning potential index. Reliable probabilistic data.
+      //   2. Met Office UKV 2km — 0–48h only. Higher resolution for UK; overrides
+      //      ECMWF temperature/wind/code for the near term. Graceful-fail safe.
+      //   3. Open-Meteo best_match minutely_15 — 15-min nowcast for "rain in X min".
       async function loadWeather(lat, lon) {
-        const url =
-          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-          `&hourly=temperature_2m,weathercode,windspeed_10m,winddirection_10m,windgusts_10m,uv_index,visibility,precipitation_probability` +
-          `&current_weather=true&timezone=auto&forecast_days=2`;
-        const r = await fetch(url);
-        if (!r.ok) throw new Error('Weather API error');
-        return r.json();
+        const base = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`;
+
+        const ecmwfUrl = base +
+          `&hourly=temperature_2m,weathercode,windspeed_10m,winddirection_10m,windgusts_10m,uv_index,visibility,precipitation_probability,lightning_potential` +
+          `&current_weather=true&models=ecmwf_ifs025&timezone=auto&forecast_days=2`;
+
+        // UKV provides physical fields only — no ensemble probability from deterministic run
+        const ukvUrl = base +
+          `&hourly=temperature_2m,weathercode,windspeed_10m` +
+          `&models=ukmo_uk_deterministic_2km&timezone=auto&forecast_days=2`;
+
+        // Nowcast uses best_match since ECMWF has no sub-hourly data
+        const nowcastUrl = base +
+          `&minutely_15=precipitation,weathercode&timezone=auto&forecast_days=1`;
+
+        const [ecmwfRes, ukvRes, nowcastRes] = await Promise.allSettled([
+          fetch(ecmwfUrl), fetch(ukvUrl), fetch(nowcastUrl),
+        ]);
+
+        if (ecmwfRes.status !== 'fulfilled' || !ecmwfRes.value.ok)
+          throw new Error('Weather API error');
+        const d = await ecmwfRes.value.json();
+
+        // UKV overlay — override temp/code/wind for matching 0–48h timestamps.
+        // Precipitation probability and lightning_potential always from ECMWF.
+        const ukvMap = new Map();
+        if (ukvRes.status === 'fulfilled' && ukvRes.value.ok) {
+          try {
+            const ud = await ukvRes.value.json();
+            ud.hourly.time.forEach((t, i) => ukvMap.set(t, {
+              temp: ud.hourly.temperature_2m[i],
+              c:    ud.hourly.weathercode[i],
+              wind: ud.hourly.windspeed_10m[i],
+            }));
+          } catch (e) { console.warn('UKV parse failed, ECMWF only:', e); }
+        }
+
+        // Merge: ECMWF as base, UKV overrides temp/code/wind where available.
+        d.hourly.time.forEach((t, i) => {
+          const ukv = ukvMap.get(t);
+          if (ukv) {
+            d.hourly.temperature_2m[i] = ukv.temp;
+            d.hourly.weathercode[i]    = ukv.c;
+            d.hourly.windspeed_10m[i]  = ukv.wind;
+          }
+        });
+
+        // Sync current_weather from the nearest merged hourly slot
+        const cidx = nearestIdx(d.hourly.time);
+        if (d.current_weather) {
+          d.current_weather.temperature = d.hourly.temperature_2m[cidx];
+          d.current_weather.weathercode = d.hourly.weathercode[cidx];
+          d.current_weather.windspeed   = d.hourly.windspeed_10m[cidx];
+        }
+
+        // Nowcast minutely_15
+        let nowcast = [];
+        if (nowcastRes.status === 'fulfilled' && nowcastRes.value.ok) {
+          try {
+            const nd = await nowcastRes.value.json();
+            nowcast = nd.minutely_15?.time
+              ? nd.minutely_15.time.map((t, i) => ({
+                  t,
+                  precip: nd.minutely_15.precipitation[i] ?? 0,
+                  c:      nd.minutely_15.weathercode[i],
+                }))
+              : [];
+          } catch (e) { console.warn('Nowcast parse failed:', e); }
+        }
+        d.nowcast = nowcast;
+        return d;
       }
 
       async function loadMarine(lat, lon) {
@@ -1459,6 +1564,11 @@
           cards.push(`<div class="note-card">🏞️ Inland river spot — showing river flow instead of open-water swell. Score is based on wind alone; mind the current.</div>`);
         }
 
+        const hyperlocal = makeHyperlocal(S.weather?.nowcast);
+        if (hyperlocal) {
+          cards.push(`<div class="note-card">${hyperlocal}</div>`);
+        }
+
         return `<div class="stats-grid">${cards.join('')}</div>`;
       }
 
@@ -1518,15 +1628,17 @@
         const w = S.weather;
         const cur = w.current_weather;
         const idx = nearestIdx(w.hourly.time);
+        const pp = w.hourly.precipitation_probability?.[idx] ?? 0;
+        const lp = w.hourly.lightning_potential?.[idx] ?? null;
         const out = {
           wind: cur.windspeed,
           windDir: cur.winddirection,
           gust: w.hourly.windgusts_10m?.[idx],
           temp: cur.temperature,
-          code: cur.weathercode,
+          code: effectiveCode(cur.weathercode, pp, lp),
           uv: w.hourly.uv_index?.[idx],
           visibility: w.hourly.visibility?.[idx],
-          precip: w.hourly.precipitation_probability?.[idx],
+          precip: pp,
           hasMarine: false,
         };
         // The marine API itself can't tell us how far the requested point is
@@ -1570,9 +1682,11 @@
           const time = new Date(t);
           if (time.getTime() < now - 30 * 60 * 1000) return;
           if (rows.length >= 12) return;
+          const hPP = w.hourly.precipitation_probability?.[i] ?? 0;
+          const hLP = w.hourly.lightning_potential?.[i] ?? null;
           rows.push({
             time,
-            code: w.hourly.weathercode[i],
+            code: effectiveCode(w.hourly.weathercode[i], hPP, hLP),
             wind: w.hourly.windspeed_10m[i],
             gust: w.hourly.windgusts_10m?.[i],
             wave: marineByTime[t],

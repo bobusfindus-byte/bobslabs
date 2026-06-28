@@ -522,10 +522,19 @@
       let pendingCtrl = null;
 
       async function fetchShops(lat, lon, radius) {
+        const wasAborted = !!pendingCtrl;
         pendingCtrl?.abort();
         const gen = ++searchGen;
 
-        const q = `[out:json][timeout:20];
+        // Overpass rate-limits at 2 concurrent queries per IP. Aborting client-side
+        // closes the TCP connection but the server-side slot stays occupied for ~1s.
+        // Waiting here prevents an immediate follow-up request from being rejected.
+        if (wasAborted) {
+          await new Promise((r) => setTimeout(r, 1200));
+          if (gen !== searchGen) return null;
+        }
+
+        const q = `[out:json][timeout:25];
 (
   node["shop"="music"](around:${radius},${lat},${lon});
   way["shop"="music"](around:${radius},${lat},${lon});
@@ -538,7 +547,7 @@ out center body;`;
           if (gen !== searchGen) return null;
           const ctrl = new AbortController();
           pendingCtrl = ctrl;
-          const timer = setTimeout(() => ctrl.abort(), 23000);
+          const timer = setTimeout(() => ctrl.abort(), 28000);
           try {
             const res = await fetch(endpoint, {
               method: "POST",
@@ -963,24 +972,28 @@ out center body;`;
         render();
       }
 
+      let radiusDebounce = null;
       function setRadius(r) {
         if (r === S.radius || !S.lat) return;
         S.radius = r;
         S.selected = null;
         S.phase = "loading";
         render();
-        fetchShops(S.lat, S.lon, r)
-          .then((shops) => {
-            if (shops === null) return;
-            S.shops = shops;
-            S.phase = "ready";
-            render();
-          })
-          .catch(() => {
-            S.errMsg = "Could not reach Overpass. Try again.";
-            S.phase = "error";
-            render();
-          });
+        clearTimeout(radiusDebounce);
+        radiusDebounce = setTimeout(() => {
+          fetchShops(S.lat, S.lon, r)
+            .then((shops) => {
+              if (shops === null) return;
+              S.shops = shops;
+              S.phase = "ready";
+              render();
+            })
+            .catch(() => {
+              S.errMsg = "Could not reach Overpass. Try again.";
+              S.phase = "error";
+              render();
+            });
+        }, 400);
       }
 
       // ── Locate & search ────────────────────────────────────────────────────────

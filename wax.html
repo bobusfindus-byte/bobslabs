@@ -364,7 +364,7 @@
         shops: [],
         radius: 1000,
         selected: null,
-        showAll: false,
+        showAll: true,
         secondHandOnly: false,
         favsOnly: false,
         sortBy: "score",
@@ -514,7 +514,7 @@
 
       // ── Overpass fetch ─────────────────────────────────────────────────────────
       async function fetchShops(lat, lon, radius) {
-        const q = `[out:json][timeout:25];
+        const q = `[out:json][timeout:30];
 (
   node["shop"="music"](around:${radius},${lat},${lon});
   way["shop"="music"](around:${radius},${lat},${lon});
@@ -794,7 +794,7 @@ out center body;`;
       }
 
       function getVisibleShops() {
-        let shops = S.showAll ? S.shops : S.shops.filter((s) => s.score >= 4);
+        let shops = S.showAll ? S.shops : S.shops.filter((s) => s.score >= 5);
         if (S.secondHandOnly) shops = shops.filter((s) => s.secondHand);
         if (S.favsOnly) shops = shops.filter((s) => getFavs().has(s.id));
         if (S.tagFilter)
@@ -850,7 +850,7 @@ out center body;`;
   <div class="ctrl-group">
     <button class="ctrl-chip${S.secondHandOnly ? " active" : ""}" onclick="S.secondHandOnly=!S.secondHandOnly;render()">🖤 Second Hand</button>
     <button class="ctrl-chip${S.favsOnly ? " active" : ""}" onclick="S.favsOnly=!S.favsOnly;render()">⭐ Saved</button>
-    <button class="ctrl-chip${S.showAll ? " active" : ""}" onclick="S.showAll=!S.showAll;render()">${S.showAll ? "All shops" : "Curated"}</button>
+    <button class="ctrl-chip${!S.showAll ? " active" : ""}" onclick="S.showAll=!S.showAll;render()">${S.showAll ? "Curated" : "All shops"}</button>
     <button class="ctrl-chip" onclick="S.sortBy=S.sortBy==='score'?'distance':'score';render()">${S.sortBy === "score" ? "🏆 Vibes" : "📍 Near"}</button>
     ${S.tagFilter ? `<button class="ctrl-chip active" onclick="S.tagFilter=null;render()">✕ ${S.tagFilter}</button>` : ""}
   </div>
@@ -865,7 +865,7 @@ out center body;`;
   <div class="big">🎵</div>
   ${S.secondHandOnly
     ? "No second-hand record shops found within " + fmtDist(S.radius) + ". Try a larger radius or turn off the filter."
-    : "No record shops found within " + fmtDist(S.radius) + ". Try a larger radius" + (S.showAll ? "." : " or toggle Show all.")}
+    : "No record shops found within " + fmtDist(S.radius) + ". Try a larger radius" + (!S.showAll ? " or tap 'All shops' to remove the curated filter." : ".")}
 </div>`;
         } else {
           const n = visibleShops.length;

@@ -518,14 +518,14 @@
         "https://overpass.kumi.systems/api/interpreter",
       ];
 
-      // Cancelled when a newer fetchShops call starts, so only one request is
-      // ever in-flight at a time (avoids Overpass rate-limit on rapid radius changes)
-      let pendingAbort = null;
+      let searchGen = 0;
+      let pendingCtrl = null;
 
       async function fetchShops(lat, lon, radius) {
-        pendingAbort?.abort();
+        pendingCtrl?.abort();
+        const gen = ++searchGen;
 
-        const q = `[out:json][timeout:30];
+        const q = `[out:json][timeout:20];
 (
   node["shop"="music"](around:${radius},${lat},${lon});
   way["shop"="music"](around:${radius},${lat},${lon});
@@ -534,24 +534,26 @@
 );
 out center body;`;
 
-        let lastErr;
         for (const endpoint of OVERPASS_ENDPOINTS) {
-          const controller = new AbortController();
-          pendingAbort = controller;
-          const timer = setTimeout(() => controller.abort(), 35000);
+          if (gen !== searchGen) return null;
+          const ctrl = new AbortController();
+          pendingCtrl = ctrl;
+          const timer = setTimeout(() => ctrl.abort(), 23000);
           try {
             const res = await fetch(endpoint, {
               method: "POST",
               body: q,
-              signal: controller.signal,
+              signal: ctrl.signal,
             });
             clearTimeout(timer);
+            if (gen !== searchGen) return null;
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
+            if (gen !== searchGen) return null;
             if (data.remark?.includes("runtime error") || data.remark?.includes("timeout")) {
               throw new Error("Overpass timeout");
             }
-            pendingAbort = null;
+            pendingCtrl = null;
             const seen = new Set();
             return data.elements
               .filter((el) => el.tags?.name)
@@ -585,14 +587,12 @@ out center body;`;
               });
           } catch (e) {
             clearTimeout(timer);
-            // Only treat as intentional cancellation if a newer fetchShops call has
-            // already replaced pendingAbort. If OUR timer fired the abort, pendingAbort
-            // still equals controller, so we fall through and try the fallback endpoint.
-            if (e.name === "AbortError" && pendingAbort !== controller) throw e;
-            lastErr = e;
+            if (gen !== searchGen) return null;
+            // genuine failure on this endpoint → try next
           }
         }
-        throw lastErr;
+        if (gen !== searchGen) return null;
+        throw new Error("Could not reach Overpass API. Try again.");
       }
 
       // ── Radar ──────────────────────────────────────────────────────────────────
@@ -971,13 +971,13 @@ out center body;`;
         render();
         fetchShops(S.lat, S.lon, r)
           .then((shops) => {
+            if (shops === null) return;
             S.shops = shops;
             S.phase = "ready";
             render();
           })
-          .catch((e) => {
-            if (e?.name === "AbortError") return;
-            S.errMsg = "Could not load shops. Try again.";
+          .catch(() => {
+            S.errMsg = "Could not reach Overpass. Try again.";
             S.phase = "error";
             render();
           });
@@ -998,10 +998,11 @@ out center body;`;
             try {
               S.lat = pos.coords.latitude;
               S.lon = pos.coords.longitude;
-              S.shops = await fetchShops(S.lat, S.lon, S.radius);
+              const shops = await fetchShops(S.lat, S.lon, S.radius);
+              if (shops === null) return;
+              S.shops = shops;
               S.phase = "ready";
             } catch (e) {
-              if (e?.name === "AbortError") return;
               S.errMsg = "Could not load shops. Try again.";
               S.phase = "error";
             }
@@ -1029,10 +1030,11 @@ out center body;`;
           const { latitude: lat, longitude: lon } = d.results[0];
           S.lat = lat;
           S.lon = lon;
-          S.shops = await fetchShops(lat, lon, S.radius);
+          const shops = await fetchShops(lat, lon, S.radius);
+          if (shops === null) return;
+          S.shops = shops;
           S.phase = "ready";
         } catch (e) {
-          if (e?.name === "AbortError") return;
           S.errMsg =
             e.message === "not found"
               ? "Location not found."

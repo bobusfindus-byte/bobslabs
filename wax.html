@@ -585,7 +585,10 @@ out center body;`;
               });
           } catch (e) {
             clearTimeout(timer);
-            if (e.name === "AbortError") throw e; // intentionally cancelled, don't try fallback
+            // Only treat as intentional cancellation if a newer fetchShops call has
+            // already replaced pendingAbort. If OUR timer fired the abort, pendingAbort
+            // still equals controller, so we fall through and try the fallback endpoint.
+            if (e.name === "AbortError" && pendingAbort !== controller) throw e;
             lastErr = e;
           }
         }

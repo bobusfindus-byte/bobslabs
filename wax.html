@@ -519,22 +519,20 @@
       ];
 
       let searchGen = 0;
-      let pendingCtrl = null;
 
       async function fetchShops(lat, lon, radius) {
-        const wasAborted = !!pendingCtrl;
-        pendingCtrl?.abort();
         const gen = ++searchGen;
 
-        // Overpass rate-limits at 2 concurrent queries per IP. Aborting client-side
-        // closes the TCP connection but the server-side slot stays occupied for ~1s.
-        // Waiting here prevents an immediate follow-up request from being rejected.
-        if (wasAborted) {
-          await new Promise((r) => setTimeout(r, 1200));
-          if (gen !== searchGen) return null;
-        }
-
-        const q = `[out:json][timeout:25];
+        // Server timeout of 12 s; client aborts after 15 s so we never wait
+        // more than 30 s total (2 endpoints × 15 s).
+        // We deliberately do NOT abort in-flight requests from previous calls —
+        // aborting only closes the client side; Overpass keeps the server-side
+        // slot occupied until its own timeout fires, so a rapid new request
+        // would still hit the rate limit. Instead we let old requests drain
+        // naturally and rely on the gen counter to discard stale results.
+        // The fallback endpoint handles the case where the primary is occupied
+        // by an older concurrent request.
+        const q = `[out:json][timeout:12];
 (
   node["shop"="music"](around:${radius},${lat},${lon});
   way["shop"="music"](around:${radius},${lat},${lon});
@@ -543,11 +541,11 @@
 );
 out center body;`;
 
+        let lastErr;
         for (const endpoint of OVERPASS_ENDPOINTS) {
           if (gen !== searchGen) return null;
           const ctrl = new AbortController();
-          pendingCtrl = ctrl;
-          const timer = setTimeout(() => ctrl.abort(), 28000);
+          const timer = setTimeout(() => ctrl.abort(), 15000);
           try {
             const res = await fetch(endpoint, {
               method: "POST",
@@ -562,7 +560,6 @@ out center body;`;
             if (data.remark?.includes("runtime error") || data.remark?.includes("timeout")) {
               throw new Error("Overpass timeout");
             }
-            pendingCtrl = null;
             const seen = new Set();
             return data.elements
               .filter((el) => el.tags?.name)
@@ -597,11 +594,11 @@ out center body;`;
           } catch (e) {
             clearTimeout(timer);
             if (gen !== searchGen) return null;
-            // genuine failure on this endpoint → try next
+            lastErr = e;
           }
         }
         if (gen !== searchGen) return null;
-        throw new Error("Could not reach Overpass API. Try again.");
+        throw lastErr || new Error("Could not reach Overpass. Try again.");
       }
 
       // ── Radar ──────────────────────────────────────────────────────────────────

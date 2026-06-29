@@ -12,6 +12,7 @@
       content="black-translucent"
     />
     <title>Good Pubs Near Me</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
       :root {
         --bg: #0d1117;
@@ -457,10 +458,121 @@
       .fav-btn.active {
         opacity: 1;
       }
+
+      /* ── Locate menu ── */
+      .locate-menu {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .locate-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 14px;
+        padding: 10px 13px;
+        cursor: pointer;
+        text-align: left;
+      }
+      .locate-menu-item:hover { border-color: var(--amber); }
+
+      /* ── Map picker ── */
+      .map-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg);
+      }
+      .map-overlay.hidden { display: none; }
+      .map-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: calc(var(--safe-top) + 10px) 14px 10px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+      }
+      .map-bar-title {
+        flex: 1;
+        font-size: 14px;
+        color: var(--text-dim);
+      }
+      .map-close-btn {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 18px;
+        padding: 0 13px;
+        cursor: pointer;
+        line-height: 34px;
+      }
+      #map-pick-canvas {
+        flex: 1;
+        width: 100%;
+      }
+      .map-pick-footer {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px calc(var(--safe-bottom) + 10px);
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+      }
+      .map-pick-name {
+        flex: 1;
+        font-size: 13.5px;
+        color: var(--text-dim);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .map-pick-confirm {
+        background: var(--amber);
+        border: none;
+        border-radius: 10px;
+        color: #000;
+        font-family: var(--font);
+        font-size: 15px;
+        font-weight: 700;
+        padding: 9px 16px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .map-pick-confirm:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .leaflet-pane,
+      .leaflet-control { z-index: 1; }
+      .leaflet-tile-pane { filter: brightness(1.7) contrast(0.9); }
     </style>
   </head>
   <body>
     <div id="root"></div>
+    <div class="map-overlay hidden" id="map-overlay">
+      <div class="map-bar">
+        <span class="map-bar-title">Tap the map to drop a pin</span>
+        <button class="map-close-btn" onclick="closeMapPicker()">✕</button>
+      </div>
+      <div id="map-pick-canvas"></div>
+      <div class="map-pick-footer">
+        <span class="map-pick-name" id="map-pick-name">No location picked yet</span>
+        <button class="map-pick-confirm" id="map-pick-confirm" onclick="confirmMapPick()" disabled>Use this spot</button>
+      </div>
+    </div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
       // ── State ──────────────────────────────────────────────────────────────────
       const S = {
@@ -477,6 +589,7 @@
         tagFilter: null,
         heading: null,
         compassOn: false,
+        locateMenuOpen: false,
         errMsg: "",
       };
 
@@ -1115,6 +1228,7 @@ out center body;`;
       let settingsOpen = false;
       function toggleSettings() {
         settingsOpen = !settingsOpen;
+        if (settingsOpen) S.locateMenuOpen = false;
         render();
         if (settingsOpen) {
           requestAnimationFrame(() => {
@@ -1164,6 +1278,99 @@ out center body;`;
         }
       }
 
+      // ── Map picker ─────────────────────────────────────────────────────────────
+      async function reverseGeocode(lat, lon) {
+        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+        const d = await r.json();
+        return d.address?.city || d.address?.town || d.address?.village || d.address?.county || "Picked Location";
+      }
+
+      function toggleLocateMenu() {
+        S.locateMenuOpen = !S.locateMenuOpen;
+        if (S.locateMenuOpen) settingsOpen = false;
+        render();
+      }
+
+      function closeLocateMenu() {
+        S.locateMenuOpen = false;
+        render();
+      }
+
+      function locateMenu() {
+        if (!S.locateMenuOpen) return "";
+        return `<div class="locate-menu">
+  <button class="locate-menu-item" onclick="closeLocateMenu(); locate()">⌖ Use my current location</button>
+  <button class="locate-menu-item" onclick="closeLocateMenu(); openMapPicker()">🗺 Pick a spot on the map</button>
+</div>`;
+      }
+
+      let mapPicker = null;
+      let mapPickMarker = null;
+      let mapPick = null;
+
+      function openMapPicker() {
+        document.getElementById("map-overlay").classList.remove("hidden");
+        document.getElementById("map-pick-name").textContent = "No location picked yet";
+        document.getElementById("map-pick-confirm").disabled = true;
+        mapPick = null;
+        if (!mapPicker) {
+          mapPicker = L.map("map-pick-canvas", { attributionControl: false }).setView(
+            [S.lat ?? 51.5, S.lon ?? -0.12],
+            S.lat != null ? 10 : 5,
+          );
+          L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+            subdomains: "abcd",
+            maxZoom: 19,
+          }).addTo(mapPicker);
+          mapPicker.on("click", (e) => setMapPick(e.latlng.lat, e.latlng.lng));
+        } else {
+          mapPicker.setView([S.lat ?? 51.5, S.lon ?? -0.12], S.lat != null ? 10 : 5);
+          if (mapPickMarker) {
+            mapPicker.removeLayer(mapPickMarker);
+            mapPickMarker = null;
+          }
+        }
+        setTimeout(() => mapPicker.invalidateSize(), 0);
+      }
+
+      function setMapPick(lat, lon) {
+        mapPick = { lat, lon };
+        if (mapPickMarker) mapPicker.removeLayer(mapPickMarker);
+        mapPickMarker = L.marker([lat, lon]).addTo(mapPicker);
+        document.getElementById("map-pick-name").textContent = `${lat.toFixed(4)}, ${lon.toFixed(4)} — looking up name…`;
+        document.getElementById("map-pick-confirm").disabled = false;
+        reverseGeocode(lat, lon)
+          .then((name) => {
+            if (mapPick && mapPick.lat === lat && mapPick.lon === lon) {
+              mapPick.name = name;
+              document.getElementById("map-pick-name").textContent = name;
+            }
+          })
+          .catch(() => {});
+      }
+
+      function closeMapPicker() {
+        document.getElementById("map-overlay").classList.add("hidden");
+      }
+
+      async function confirmMapPick() {
+        if (!mapPick) return;
+        const { lat, lon } = mapPick;
+        closeMapPicker();
+        S.lat = lat;
+        S.lon = lon;
+        S.phase = "loading";
+        render();
+        try {
+          S.pubs = await fetchPubs(lat, lon, S.radius);
+          S.phase = "ready";
+        } catch (e) {
+          S.errMsg = "Could not load pubs. Try again.";
+          S.phase = "error";
+        }
+        render();
+      }
+
       // ── HTML ───────────────────────────────────────────────────────────────────
       function header() {
         const panel = settingsOpen
@@ -1189,8 +1396,9 @@ out center body;`;
   ${panel}
   <div class="search-row">
     <input class="search-input" id="si" type="search" placeholder="Search a neighbourhood…" autocomplete="off" spellcheck="false">
-    <button class="locate-btn" onclick="locate()">📍 Find Me</button>
+    <button class="locate-btn${S.locateMenuOpen ? " active" : ""}" onclick="toggleLocateMenu()">📍 Find Me</button>
   </div>
+  ${locateMenu()}
 </div>`;
       }
 

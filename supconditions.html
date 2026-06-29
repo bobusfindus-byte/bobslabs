@@ -279,7 +279,6 @@
       }
       .leaflet-pane,
       .leaflet-control { z-index: 1; }
-      .leaflet-tile-pane { filter: brightness(1.7) contrast(0.9); }
 
       /* ── State screens ── */
       .state-screen {
@@ -1721,7 +1720,7 @@
             [S.lat ?? 51.5, S.lon ?? -0.12],
             S.lat != null ? 10 : 5,
           );
-          L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
             subdomains: 'abcd',
             maxZoom: 19,
           }).addTo(mapPicker);

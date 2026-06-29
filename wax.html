@@ -532,12 +532,13 @@
         // naturally and rely on the gen counter to discard stale results.
         // The fallback endpoint handles the case where the primary is occupied
         // by an older concurrent request.
-        const q = `[out:json][timeout:12];
+        // shop=second_hand with a name regex was timing out at larger radii —
+        // cities have hundreds of second_hand shops and Overpass runs the regex
+        // on every one. shop=music directly tags dedicated music/record stores.
+        const q = `[out:json][timeout:20];
 (
   node["shop"="music"](around:${radius},${lat},${lon});
   way["shop"="music"](around:${radius},${lat},${lon});
-  node["shop"="second_hand"]["name"~"record|vinyl|wax|groove|disc",i](around:${radius},${lat},${lon});
-  way["shop"="second_hand"]["name"~"record|vinyl|wax|groove|disc",i](around:${radius},${lat},${lon});
 );
 out center body;`;
 
@@ -545,7 +546,7 @@ out center body;`;
         for (const endpoint of OVERPASS_ENDPOINTS) {
           if (gen !== searchGen) return null;
           const ctrl = new AbortController();
-          const timer = setTimeout(() => ctrl.abort(), 15000);
+          const timer = setTimeout(() => ctrl.abort(), 23000);
           try {
             const res = await fetch(endpoint, {
               method: "POST",

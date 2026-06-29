@@ -523,83 +523,81 @@
       async function fetchShops(lat, lon, radius) {
         const gen = ++searchGen;
 
-        // Server timeout of 12 s; client aborts after 15 s so we never wait
-        // more than 30 s total (2 endpoints × 15 s).
-        // We deliberately do NOT abort in-flight requests from previous calls —
-        // aborting only closes the client side; Overpass keeps the server-side
-        // slot occupied until its own timeout fires, so a rapid new request
-        // would still hit the rate limit. Instead we let old requests drain
-        // naturally and rely on the gen counter to discard stale results.
-        // The fallback endpoint handles the case where the primary is occupied
-        // by an older concurrent request.
-        // shop=second_hand with a name regex was timing out at larger radii —
-        // cities have hundreds of second_hand shops and Overpass runs the regex
-        // on every one. shop=music directly tags dedicated music/record stores.
-        const q = `[out:json][timeout:20];
+        const q = `[out:json][timeout:9];
 (
   node["shop"="music"](around:${radius},${lat},${lon});
   way["shop"="music"](around:${radius},${lat},${lon});
 );
 out center body;`;
 
-        let lastErr;
-        for (const endpoint of OVERPASS_ENDPOINTS) {
-          if (gen !== searchGen) return null;
-          const ctrl = new AbortController();
-          const timer = setTimeout(() => ctrl.abort(), 23000);
-          try {
-            const res = await fetch(endpoint, {
-              method: "POST",
-              body: q,
-              signal: ctrl.signal,
-            });
-            clearTimeout(timer);
-            if (gen !== searchGen) return null;
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-            if (gen !== searchGen) return null;
-            if (data.remark?.includes("runtime error") || data.remark?.includes("timeout")) {
-              throw new Error("Overpass timeout");
-            }
-            const seen = new Set();
-            return data.elements
-              .filter((el) => el.tags?.name)
-              .map((el) => {
-                const lat2 = el.lat ?? el.center?.lat;
-                const lon2 = el.lon ?? el.center?.lon;
-                const tags = el.tags || {};
-                const name = tags.name;
-                return {
-                  id: el.id,
-                  name,
-                  lat: lat2,
-                  lon: lon2,
-                  tags,
-                  score: shopScore(tags, name),
-                  badges: shopBadges(tags),
-                  dist: haversine(lat, lon, lat2, lon2),
-                  bearing: bearingDeg(lat, lon, lat2, lon2),
-                  open: openStatus(tags.opening_hours),
-                  secondHand: isSecondHand(tags),
-                  website: tags.website || tags["contact:website"] || null,
-                  cx: 0,
-                  cy: 0,
-                };
-              })
-              .filter((s) => {
-                if (s.lat == null || s.lon == null) return false;
-                if (seen.has(s.id)) return false;
-                seen.add(s.id);
-                return true;
-              });
-          } catch (e) {
-            clearTimeout(timer);
-            if (gen !== searchGen) return null;
-            lastErr = e;
-          }
-        }
         if (gen !== searchGen) return null;
-        throw lastErr || new Error("Could not reach Overpass. Try again.");
+
+        // Fire all endpoints in parallel; use whichever responds first.
+        // Sequential fallback means waiting up to N×timeout before getting
+        // results or an error. Parallel racing means max wait = single timeout
+        // regardless of how many endpoints fail.
+        const ctrls = [];
+        const tryEndpoint = (url) => {
+          const ctrl = new AbortController();
+          ctrls.push(ctrl);
+          const timer = setTimeout(() => ctrl.abort(), 10000);
+          return fetch(url, { method: "POST", body: q, signal: ctrl.signal })
+            .then(async (res) => {
+              clearTimeout(timer);
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              const data = await res.json();
+              if (data.remark?.includes("runtime error") || data.remark?.includes("timeout"))
+                throw new Error("Overpass timeout");
+              return data;
+            })
+            .catch((e) => { clearTimeout(timer); throw e; });
+        };
+
+        let data;
+        try {
+          data = await Promise.any(OVERPASS_ENDPOINTS.map(tryEndpoint));
+        } catch (e) {
+          ctrls.forEach((c) => c.abort());
+          if (gen !== searchGen) return null;
+          const err = e instanceof AggregateError ? e.errors[0] : e;
+          throw err || new Error("Could not reach Overpass. Try again.");
+        }
+
+        // Cancel any still-running loser requests
+        ctrls.forEach((c) => c.abort());
+        if (gen !== searchGen) return null;
+
+        const seen = new Set();
+        return data.elements
+          .filter((el) => el.tags?.name)
+          .map((el) => {
+            const lat2 = el.lat ?? el.center?.lat;
+            const lon2 = el.lon ?? el.center?.lon;
+            const tags = el.tags || {};
+            const name = tags.name;
+            return {
+              id: el.id,
+              name,
+              lat: lat2,
+              lon: lon2,
+              tags,
+              score: shopScore(tags, name),
+              badges: shopBadges(tags),
+              dist: haversine(lat, lon, lat2, lon2),
+              bearing: bearingDeg(lat, lon, lat2, lon2),
+              open: openStatus(tags.opening_hours),
+              secondHand: isSecondHand(tags),
+              website: tags.website || tags["contact:website"] || null,
+              cx: 0,
+              cy: 0,
+            };
+          })
+          .filter((s) => {
+            if (s.lat == null || s.lon == null) return false;
+            if (seen.has(s.id)) return false;
+            seen.add(s.id);
+            return true;
+          });
       }
 
       // ── Radar ──────────────────────────────────────────────────────────────────
